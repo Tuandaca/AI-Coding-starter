@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+vendor/
+.pnpm-store/
+__pycache__/
+*.py[cod]
+
+# Build outputs
+dist/
+build/
+out/
+.next/
+
+# Environment (NEVER commit!)
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temp
+tmp/
+temp/
+*.tmp
+
+# Backup files
+*.bak
