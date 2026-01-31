@@ -26,21 +26,25 @@
 
 ## 🎯 Current Focus
 
-> Đang phát triển **Phase 3: Auto-Discovery System**
-> (Tự động nhận diện môi trường, Git config, dependencies)
+> Đang phát triển **Phase 4: Smart Install**
+> (Tự động install dependencies sau khi tạo project)
 
 ---
 
 ## ✅ Completed Features
 
 - [x] **Phase 1: Project Context System**
-  - [x] CONTEXT.md template
-  - [x] GEMINI.md reference
+  - [x] CONTEXT.md template & GEMINI.md integration
   - [x] Integrated into new_project.py
 
 - [x] **Phase 2: Quick Commands**
   - [x] /status, /progress, /fix, /commit, /deploy workflows
   - [x] Integrated into new_project.py
+
+- [x] **Phase 3: Auto-Discovery System**
+  - [x] Detect OS, Shell, Git User
+  - [x] Detect Node.js, Python, Git CLI versions
+  - [x] Inject Environment Context into GEMINI.md
 
 - [x] **GitHub Release**
   - [x] Public Repo: tuandaca/AI-Coding-starter
