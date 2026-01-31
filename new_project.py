@@ -23,6 +23,14 @@ from pathlib import Path
 MASTER_TEMPLATE_PATH = Path(r"D:\VibeCoding-Template\.agent")
 DEFAULT_PROJECT_PATH = Path(r"D:\Projects")
 MAX_TYPES = 3
+STARTER_PATH = Path(__file__).parent
+EXTRA_WORKFLOWS = [
+    "status.md",
+    "progress.md",
+    "fix.md",
+    "commit.md",
+    "deploy.md"
+]
 
 # ============================================
 # TECH STACK PRESETS
@@ -831,6 +839,9 @@ def merge_requirements(selected_types):
         merged["scripts"].update(config.get("scripts", []))
         merged["focus"].append(config.get("focus", ""))
     
+    # Add extra workflows (VibeCoding enhancements)
+    merged["workflows"].update(EXTRA_WORKFLOWS)
+    
     # Convert sets to sorted lists
     for key in ["agents", "skills", "shared", "workflows", "scripts"]:
         merged[key] = sorted(list(merged[key]))
@@ -900,11 +911,19 @@ def copy_selective(source_base, dest_base, merged_req, project_name, selected_ty
     # Copy workflows
     print("\n  📁 Copying workflows...")
     workflows_src = source_base / "workflows"
+    starter_workflows_src = STARTER_PATH / ".agent" / "workflows"
+    
     workflows_dest = dest_base / "workflows"
     workflows_dest.mkdir(exist_ok=True)
     
     for workflow in merged_req["workflows"]:
+        # Try finding in master template
         src_file = workflows_src / workflow
+        
+        # If not found, try finding in starter .agent
+        if not src_file.exists():
+            src_file = starter_workflows_src / workflow
+            
         if src_file.exists():
             shutil.copy2(src_file, workflows_dest / workflow)
             total_bytes += src_file.stat().st_size
