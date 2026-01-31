@@ -5,23 +5,66 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Made with ❤️](https://img.shields.io/badge/Made%20with-❤️-red.svg)](https://github.com)
 
+---
+
+## ⚠️ Lưu ý quan trọng
+
+Project này được xây dựng **dựa trên** [google-antigravity](https://github.com/Dokhacgiakhoa/google-antigravity) bởi **@Dokhacgiakhoa**.
+
+**Tôi KHÔNG tạo ra hệ thống Agent gốc** - tôi chỉ đóng góp thêm:
+- 🎯 **Interactive Project Creator** - Wizard tạo dự án nhanh
+- 🛠️ **Tech Stack Presets** - 21+ presets công nghệ
+- 📋 **Context System** - AI nhớ context giữa sessions
+- 🚀 **Setup Script** - 1-click setup cho Windows/Mac/Linux
+
+Toàn bộ credit về Multi-Agent System, Skills, và Workflows thuộc về tác giả gốc.
+
+---
+
+## 🔧 Cách hoạt động
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Bạn chạy: setup.bat                                        │
+│           ↓                                                  │
+│  Script tự động clone template từ:                          │
+│  https://github.com/Dokhacgiakhoa/google-antigravity       │
+│           ↓                                                  │
+│  Setup thêm các tools của repo này:                         │
+│  - new_project.py (Interactive wizard)                      │
+│  - Tech Stack Presets                                        │
+│  - Context System                                            │
+│           ↓                                                  │
+│  Bạn có thể tạo projects với: python new_project.py         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## ✨ Tính năng
 
-- 🤖 **Multi-Agent System** - Nhiều AI agents chuyên biệt (Frontend, Backend, Security, etc.)
-- 📚 **Skill Library** - Thư viện skills cho từng loại dự án
+### Từ [google-antigravity](https://github.com/Dokhacgiakhoa/google-antigravity) (Original):
+- 🤖 **Multi-Agent System** - Nhiều AI agents chuyên biệt
+- 📚 **Skill Library** - Thư viện skills đa dạng
+- 📂 **Shared Modules** - Database, API, Security standards
+
+### Tôi đóng góp thêm (This repo):
 - 🎯 **Project Types** - 7 loại dự án với config tối ưu
 - 🛠️ **Tech Stack Presets** - 21+ presets công nghệ phổ biến
 - 📋 **Context System** - AI nhớ context dự án giữa các sessions
+- 🚀 **Setup Script** - Tự động setup 1-click
+
+---
 
 ## 🚀 Cài đặt nhanh
 
 ### Windows
 
 ```bash
-# 1. Clone repo
+# 1. Clone repo này
 git clone https://github.com/Tuandaca/AI-Coding-starter.git
 
-# 2. Chạy setup
+# 2. Chạy setup (sẽ tự động clone template gốc)
 cd AI-Coding-starter
 setup.bat
 ```
@@ -29,7 +72,7 @@ setup.bat
 ### Mac/Linux
 
 ```bash
-# 1. Clone repo
+# 1. Clone repo này
 git clone https://github.com/Tuandaca/AI-Coding-starter.git
 
 # 2. Chạy setup
@@ -38,23 +81,24 @@ chmod +x setup.sh
 ./setup.sh
 ```
 
+---
+
 ## 📁 Cấu trúc thư mục
 
 ```
-AI-coding-starter/
-├── .agent/                  # AI Configuration
+AI-Coding-starter/
+├── .agent/                  # AI Configuration (from original)
 │   ├── agents/              # AI Agent definitions
 │   ├── skills/              # Skill library
 │   ├── workflows/           # Workflow commands
-│   ├── .shared/             # Shared modules
-│   ├── core/                # Core rules
-│   ├── rules/               # Base rules
 │   └── GEMINI.md            # Main AI config
-├── new_project.py           # Interactive project creator
-├── setup.bat                # Windows setup
-├── setup.sh                 # Mac/Linux setup
+├── new_project.py           # ⭐ Interactive project creator (MY CONTRIBUTION)
+├── setup.bat                # ⭐ Windows setup (MY CONTRIBUTION)
+├── setup.sh                 # ⭐ Mac/Linux setup (MY CONTRIBUTION)
 └── README.md
 ```
+
+---
 
 ## 🎮 Cách sử dụng
 
@@ -67,22 +111,14 @@ python new_project.py
 Wizard sẽ hỏi:
 - Tên dự án
 - Đường dẫn
-- Loại dự án (Personal Web, E-commerce, SaaS, Mobile, Game, AI/ML, Full-Stack)
-- Tech Stack preset
+- Loại dự án (7 types)
+- Tech Stack preset (21+ options)
 
 ### 2. Mở project trong Antigravity IDE
 
-```bash
-# Mở folder project
-# AI sẽ tự động đọc .agent/GEMINI.md
-```
+AI sẽ tự động đọc `.agent/GEMINI.md` và bắt đầu hỗ trợ!
 
-### 3. Bắt đầu code!
-
-```
-Bạn: Tạo trang login cho tôi
-AI: (Hiểu context từ GEMINI.md) → Tạo code đúng tech stack!
-```
+---
 
 ## 🎯 Loại dự án hỗ trợ
 
@@ -96,18 +132,32 @@ AI: (Hiểu context từ GEMINI.md) → Tạo code đúng tech stack!
 | 🤖 AI/ML | AI applications | Python + FastAPI + LangChain |
 | 🔥 Full-Stack | Complete web app | Next.js + Prisma + PostgreSQL |
 
+---
+
 ## 📋 Context System
 
-File `.agent/CONTEXT.md` giúp AI nhớ:
-- Tiến độ dự án
-- Quyết định đã thực hiện
-- Issues đang tồn tại
-- Next steps
+File `.agent/CONTEXT.md` giúp AI nhớ tiến độ dự án giữa các sessions.
 
 **Tip:** Cuối mỗi session, nói với AI:
 ```
 Cập nhật CONTEXT.md với tiến độ hôm nay
 ```
+
+---
+
+## 🙏 Credits & Acknowledgments
+
+### Original Authors:
+- **[@Dokhacgiakhoa](https://github.com/Dokhacgiakhoa)** - Tác giả hệ thống [google-antigravity](https://github.com/Dokhacgiakhoa/google-antigravity)
+- Multi-Agent System, Skills, Workflows - Toàn bộ credit thuộc về tác giả gốc
+
+### This Repository:
+- **[@Tuandaca](https://github.com/Tuandaca)** - Interactive Project Creator, Tech Stack Presets, Context System, Setup Scripts
+
+### Tools Used:
+- [Antigravity IDE](https://antigravity.dev) - AI Coding IDE
+
+---
 
 ## 🤝 Đóng góp
 
@@ -117,15 +167,12 @@ Contributions are welcome! Hãy:
 3. Commit changes
 4. Tạo Pull Request
 
+---
+
 ## 📄 License
 
 MIT License - Xem file [LICENSE](LICENSE) để biết thêm chi tiết.
 
-## 🙏 Credits
-
-- Được phát triển cho cộng đồng Việt Nam 🇻🇳
-- Sử dụng với [Antigravity IDE](https://antigravity.dev)
-
 ---
 
-**Made with ❤️ by Vietnamese Developers**
+**Made with ❤️ for Vietnamese Developer Community 🇻🇳**
