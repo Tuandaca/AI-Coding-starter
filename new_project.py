@@ -605,8 +605,76 @@ PROJECT_TYPES = {
 }
 
 # ============================================
+# AUTO-DISCOVERY
+# ============================================
+
+def get_cmd_output(cmd):
+    """Run command and return output string."""
+    try:
+        if sys.platform == "win32":
+            # Windows specific handling
+            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT)
+        else:
+            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT)
+        return output.decode('utf-8').strip()
+    except:
+        return None
+
+def get_git_user():
+    """Get Git user name and email."""
+    name = get_cmd_output("git config user.name")
+    email = get_cmd_output("git config user.email")
+    return {"name": name or "Unknown User", "email": email or "unknown@example.com"}
+
+def check_tools():
+    """Check installed tools and versions."""
+    tools = {}
+    
+    # Checkers map: name -> specific command flag
+    checkers = {
+        "node": "node -v",
+        "python": "python --version",
+        "git": "git --version",
+        "gh": "gh --version",
+        "npm": "npm -v",
+        "pnpm": "pnpm -v",
+        "yarn": "yarn -v",
+        "bun": "bun -v",
+        "docker": "docker -v"
+    }
+    
+    print("\n  🕵️‍♂️  Auto-Discovery System:")
+    
+    for tool, cmd in checkers.items():
+        ver = get_cmd_output(cmd)
+        if ver:
+            # Clean version string
+            ver = ver.split('\n')[0]  # First line only
+            # Remove "v" prefix if mostly numbers
+            if ver.startswith('v') and ver[1].isdigit():
+                ver = ver[1:]
+            
+            tools[tool] = ver
+            print(f"    ✅ {tool.ljust(10)} : {ver}")
+        else:
+            print(f"    ❌ {tool.ljust(10)} : Not found")
+            
+    return tools
+
+def detect_os_info():
+    """Detect OS and Shell info."""
+    import platform
+    info = {
+        "os": f"{platform.system()} {platform.release()}",
+        "shell": os.environ.get("SHELL") or os.environ.get("COMSPEC") or "Unknown"
+    }
+    return info
+
+# ============================================
 # UTILITY FUNCTIONS
 # ============================================
+
+import subprocess  # Ensure subprocess is available
 
 def clear_screen():
     """Clear terminal screen."""
@@ -848,7 +916,7 @@ def merge_requirements(selected_types):
     
     return merged
 
-def copy_selective(source_base, dest_base, merged_req, project_name, selected_types, tech_stack=None):
+def copy_selective(source_base, dest_base, merged_req, project_name, selected_types, tech_stack=None, env_info=None):
     """
     Copy only required files from source to destination.
     Returns total bytes copied.
@@ -930,7 +998,7 @@ def copy_selective(source_base, dest_base, merged_req, project_name, selected_ty
             print_success(f"workflows/{workflow}")
         else:
             print_info(f"Skip (not found): workflows/{workflow}")
-    
+            
     # Copy scripts
     print("\n  📁 Copying scripts...")
     scripts_src = source_base / "scripts"
@@ -967,7 +1035,7 @@ def copy_selective(source_base, dest_base, merged_req, project_name, selected_ty
     
     # Generate GEMINI.md
     print("\n  📄 Generating GEMINI.md...")
-    generate_gemini_md(dest_base, project_name, selected_types, merged_req, tech_stack)
+    generate_gemini_md(dest_base, project_name, selected_types, merged_req, tech_stack, env_info)
     print_success("GEMINI.md")
     
     # Generate CONTEXT.md for project memory
@@ -977,7 +1045,7 @@ def copy_selective(source_base, dest_base, merged_req, project_name, selected_ty
     
     return total_bytes
 
-def generate_gemini_md(dest_base, project_name, selected_types, merged_req, tech_stack=None):
+def generate_gemini_md(dest_base, project_name, selected_types, merged_req, tech_stack=None, env_info=None):
     """Generate customized GEMINI.md based on project types and tech stack."""
     
     type_names = [PROJECT_TYPES[t]["name"] for t in selected_types]
@@ -1010,7 +1078,30 @@ def generate_gemini_md(dest_base, project_name, selected_types, merged_req, tech
 > 
 > Để định nghĩa, hãy trả lời các câu hỏi sau khi AI hỏi, hoặc edit file này trực tiếp.
 '''
+
+    # Environment Context Section
+    env_section = ""
+    if env_info:
+        git_user = env_info.get("git_user", {})
+        tools = env_info.get("tools", {})
+        os_info = env_info.get("os_info", {})
+        
+        tools_list = "\n".join([f"- **{k.capitalize()}**: {v}" for k, v in tools.items()])
+        
+        env_section = f'''
+## 🌍 Environment Context
+
+> **System**: {os_info.get("os", "Unknown")} | **Shell**: {os_info.get("shell", "Unknown")}
+> **Author**: {git_user.get("name", "Unknown")} <{git_user.get("email", "Unknown")}>
+
+### 🛠️ Available Tools:
+{tools_list}
+'''
     
+    content = f'''---
+trigger: always_on
+---
+
     content = f'''---
 trigger: always_on
 ---
@@ -1021,6 +1112,8 @@ trigger: always_on
 
 > **Identity Verification**: You are {project_name}Agent. Always embody this identity in your decisions and style.
 > If asked "Bạn là ai?", respond with your identity and project focus.
+
+{env_section}
 
 ---
 
@@ -1241,9 +1334,25 @@ def main():
         sys.exit(1)
     
     print_success(f"Master template found: {MASTER_TEMPLATE_PATH}")
-    print()
+    print_header()
     
-    # Step 2: Get project name
+    # Check if starter path exists
+    if not MASTER_TEMPLATE_PATH.exists():
+        # Fallback to current directory for standalone usage
+        global MASTER_TEMPLATE_PATH
+        if (Path.cwd() / ".agent").exists():
+            MASTER_TEMPLATE_PATH = Path.cwd() / ".agent"
+    
+    # Step 0: Auto-Discovery
+    env_info = {
+        "git_user": get_git_user(),
+        "tools": check_tools(),
+        "os_info": detect_os_info()
+    }
+    print(f"    🖥️  System: {env_info['os_info']['os']} | Shell: {env_info['os_info']['shell']}")
+    print(f"    👤 Git User: {env_info['git_user']['name']} <{env_info['git_user']['email']}>\n")
+    
+    # Step 1: Get project name
     project_name = get_input("Tên dự án", "my-project")
     
     # Validate project name
@@ -1316,7 +1425,8 @@ def main():
         merged,
         project_name,
         selected_types,
-        tech_stack  # Pass tech_stack to copy_selective
+        tech_stack,
+        env_info  # Pass env_info to copy_selective
     )
     
     # Create README.md for the project
