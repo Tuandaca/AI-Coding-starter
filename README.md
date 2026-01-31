@@ -19,10 +19,10 @@
 
 ```bash
 # 1. Clone repo
-git clone https://github.com/YOUR_USERNAME/AI-coding-starter.git
+git clone https://github.com/Tuandaca/AI-Coding-starter.git
 
 # 2. Chạy setup
-cd AI-coding-starter
+cd AI-Coding-starter
 setup.bat
 ```
 
@@ -30,10 +30,10 @@ setup.bat
 
 ```bash
 # 1. Clone repo
-git clone https://github.com/YOUR_USERNAME/AI-coding-starter.git
+git clone https://github.com/Tuandaca/AI-Coding-starter.git
 
 # 2. Chạy setup
-cd AI-coding-starter
+cd AI-Coding-starter
 chmod +x setup.sh
 ./setup.sh
 ```
