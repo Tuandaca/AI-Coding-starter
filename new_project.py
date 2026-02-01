@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Interactive Project Creator for VibeCoding
 Creates new projects with selective agent/skill copying based on project types.
@@ -1102,10 +1103,6 @@ def generate_gemini_md(dest_base, project_name, selected_types, merged_req, tech
 trigger: always_on
 ---
 
-    content = f'''---
-trigger: always_on
----
-
 # GEMINI.md - {project_name}
 
 ## 🤖 Agent Identity: {project_name}Agent
@@ -1220,17 +1217,17 @@ def generate_context_md(dest_base, project_name, selected_types, tech_stack=None
 
 | Field | Value |
 |-------|-------|
-| **Phase** | 🟡 Planning |
+| **Phase** | Planning |
 | **Started** | {today} |
 | **Last Updated** | {today} |
 | **Project Types** | {", ".join(type_names)} |
 
 ### Phases:
-- 🔴 Not Started
-- 🟡 Planning
-- 🔵 Development  
-- 🟣 Testing
-- 🟢 Production
+- Not Started
+- Planning
+- Development  
+- Testing
+- Production
 
 ---
 
@@ -1321,27 +1318,26 @@ def format_size(bytes_count):
 
 def main():
     """Main wizard flow."""
+    global MASTER_TEMPLATE_PATH
+    
     print_header()
     
-    # Step 1: Check master template
+    # Step 1: Check master template (with fallback)
     if not MASTER_TEMPLATE_PATH.exists():
-        print_error(f"Master template not found at: {MASTER_TEMPLATE_PATH}")
-        print()
-        print_info("Please clone the template first:")
-        print()
-        print(f'    git clone https://github.com/Dokhacgiakhoa/google-antigravity.git "D:\\VibeCoding-Template"')
-        print()
-        sys.exit(1)
+        # Try fallback to current directory
+        if (Path.cwd() / ".agent").exists():
+            MASTER_TEMPLATE_PATH = Path.cwd() / ".agent"
+        else:
+            print_error(f"Master template not found at: {MASTER_TEMPLATE_PATH}")
+            print()
+            print_info("Please clone the template first:")
+            print()
+            print(f'    git clone https://github.com/Dokhacgiakhoa/google-antigravity.git "D:\\VibeCoding-Template"')
+            print()
+            sys.exit(1)
     
     print_success(f"Master template found: {MASTER_TEMPLATE_PATH}")
     print_header()
-    
-    # Check if starter path exists
-    if not MASTER_TEMPLATE_PATH.exists():
-        # Fallback to current directory for standalone usage
-        global MASTER_TEMPLATE_PATH
-        if (Path.cwd() / ".agent").exists():
-            MASTER_TEMPLATE_PATH = Path.cwd() / ".agent"
     
     # Step 0: Auto-Discovery
     env_info = {
@@ -1441,7 +1437,7 @@ def main():
 
 1. Open this folder in Antigravity IDE
 2. Type: "Đọc nội dung .agent/GEMINI.md"
-3. Start building! 🚀
+3. Start building!
 
 ## Available Commands
 
