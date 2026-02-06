@@ -26,15 +26,15 @@ Toàn bộ credit về Multi-Agent System, Skills, và Workflows thuộc về t�
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Bạn chạy: setup.bat                                        │
-│           ↓                                                  │
+│           ↓                                                 │
 │  Script tự động clone template từ:                          │
-│  https://github.com/Dokhacgiakhoa/google-antigravity       │
-│           ↓                                                  │
+│  https://github.com/Dokhacgiakhoa/google-antigravity        │
+│           ↓                                                 │
 │  Setup thêm các tools của repo này:                         │
 │  - new_project.py (Interactive wizard)                      │
-│  - Tech Stack Presets                                        │
-│  - Context System                                            │
-│           ↓                                                  │
+│  - Tech Stack Presets                                       │
+│  - Context System                                           │
+│           ↓                                                 │
 │  Bạn có thể tạo projects với: python new_project.py         │
 └─────────────────────────────────────────────────────────────┘
 ```

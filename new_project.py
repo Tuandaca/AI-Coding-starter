@@ -5,7 +5,8 @@ Interactive Project Creator for VibeCoding
 Creates new projects with selective agent/skill copying based on project types.
 
 Usage:
-    python new_project.py
+    python new_project.py           # Create new project
+    python new_project.py --stats   # View analytics dashboard
     
 Or via Antigravity chat:
     /new
@@ -1534,6 +1535,20 @@ temp/
     gitignore_path.write_text(gitignore_content, encoding="utf-8")
     print_success(".gitignore")
     
+    # Track project in analytics
+    try:
+        from analytics import track_project
+        track_project({
+            "project_name": project_name,
+            "project_path": str(full_project_path),
+            "project_types": selected_types,
+            "tech_stack": tech_stack,
+            "environment": env_info
+        })
+        print_success("Analytics tracked")
+    except ImportError:
+        pass  # Analytics module not available
+    
     # Step 7: Show success
     print("\n" + "=" * 60)
     print("  ✅ HOÀN TẤT!")
@@ -1550,9 +1565,20 @@ temp/
     print(f"     1. Mở folder '{full_project_path}' trong Antigravity")
     print("     2. Gõ: \"Đọc nội dung .agent/GEMINI.md\"")
     print("     3. Bắt đầu VibeCoding! 🎉")
+    print("     4. Xem dashboard: python new_project.py --stats")
     print()
 
 if __name__ == "__main__":
+    # Check for --stats flag
+    if len(sys.argv) > 1 and sys.argv[1] == "--stats":
+        try:
+            from analytics import print_dashboard
+            print_dashboard()
+        except ImportError:
+            print("\n  ❌ analytics.py not found. Please check installation.")
+            sys.exit(1)
+        sys.exit(0)
+    
     try:
         main()
     except KeyboardInterrupt:
