@@ -57,11 +57,20 @@ echo Dang setup...
 :: Create shortcut in Projects folder
 copy "%~dp0new_project.py" "D:\Projects\new_project.py" >nul 2>&1
 
-:: Create batch shortcut
+:: Create batch shortcut in D:\Projects
 echo @echo off > "D:\Projects\NewProject.bat"
 echo title VibeCoding - New Project Creator >> "D:\Projects\NewProject.bat"
 echo python "%~dp0new_project.py" >> "D:\Projects\NewProject.bat"
 echo pause >> "D:\Projects\NewProject.bat"
+echo [OK] Da tao D:\Projects\NewProject.bat
+
+:: Create batch shortcut in current folder (same as setup.bat)
+echo @echo off > "%~dp0newProject.bat"
+echo title VibeCoding - New Project Creator >> "%~dp0newProject.bat"
+echo cd /d "%~dp0" >> "%~dp0newProject.bat"
+echo python new_project.py >> "%~dp0newProject.bat"
+echo pause >> "%~dp0newProject.bat"
+echo [OK] Da tao newProject.bat trong thu muc hien tai
 
 echo.
 echo ============================================
@@ -70,12 +79,9 @@ echo ============================================
 echo.
 echo Cac buoc tiep theo:
 echo.
-echo 1. Mo thu muc D:\Projects
-echo 2. Double-click "NewProject.bat" de tao du an moi
+echo 1. Double-click "newProject.bat" trong thu muc nay de tao du an moi
+echo 2. Hoac mo D:\Projects va click "NewProject.bat"
 echo 3. Mo du an trong Antigravity IDE
-echo.
-echo Hoac chay truc tiep:
-echo    python new_project.py
 echo.
 echo ============================================
 echo.

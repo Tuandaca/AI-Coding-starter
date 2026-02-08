@@ -36,3 +36,6 @@ temp/
 
 # Backup files
 *.bak
+
+# Auto-generated scripts
+newProject.bat
