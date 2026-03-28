@@ -765,9 +765,41 @@ def get_presets_for_types(selected_types):
     
     return all_presets
 
+def merge_tech_stacks(preset_list):
+    """
+    Merge multiple preset tech stacks into one combined stack.
+    Unique values are joined with ' + '.
+    """
+    fields = ["frontend", "backend", "database", "styling", "hosting"]
+    merged = {"type": "preset", "extras": []}
+    
+    # Collect preset names
+    names = [p["name"] for p in preset_list]
+    merged["preset_name"] = " + ".join(names)
+    
+    # Merge each field, keeping unique values in order
+    for field in fields:
+        seen = []
+        for preset in preset_list:
+            val = preset.get(field, "")
+            if val and val not in seen:
+                seen.append(val)
+        merged[field] = " + ".join(seen) if seen else "TBD"
+    
+    # Merge extras
+    seen_extras = []
+    for preset in preset_list:
+        for extra in preset.get("extras", []):
+            if extra not in seen_extras:
+                seen_extras.append(extra)
+    merged["extras"] = seen_extras
+    
+    return merged
+
 def select_tech_stack(selected_types):
     """
     Interactive tech stack selection.
+    Supports selecting up to 3 presets (comma-separated).
     Returns dict with frontend, backend, database, styling, hosting, extras.
     """
     print("\n" + "=" * 60)
@@ -780,10 +812,10 @@ def select_tech_stack(selected_types):
     if len(selected_types) > 1:
         type_names = [PROJECT_TYPES[t]["name"] for t in selected_types]
         print(f"\n  📌 Multi-type: {', '.join(type_names)}")
-        print("  ℹ️  Hiển thị presets phù hợp với tất cả types đã chọn\n")
+        print("  ℹ️  Hiển thị presets phù hợp với tất cả types đã chọn")
     
-    # Display presets
-    print("\n  Chọn preset hoặc tự custom:\n")
+    max_presets = min(3, len(presets))
+    print(f"\n  Chọn preset (tối đa {max_presets}, cách nhau bởi dấu phẩy) hoặc tự custom:\n")
     
     for i, preset in enumerate(presets, 1):
         recommended = " ⭐ RECOMMENDED" if preset.get("recommended") else ""
@@ -802,14 +834,86 @@ def select_tech_stack(selected_types):
     print(f"    [{skip_idx}] ⏭️  Skip (Để AI tự đề xuất sau)\n")
     
     while True:
-        selection = get_input(f"Lựa chọn [1-{skip_idx}]", "1")
+        selection = get_input(f"Lựa chọn (ví dụ: 1 hoặc 1,3) [1-{skip_idx}]", "1")
         
         try:
-            idx = int(selection.strip())
+            # Parse comma-separated input
+            indices = [int(x.strip()) for x in selection.split(",")]
             
-            if 1 <= idx <= len(presets):
-                # Selected a preset
-                preset = presets[idx - 1]
+            # Check for custom or skip (must be standalone)
+            if len(indices) == 1:
+                idx = indices[0]
+                if idx == custom_idx:
+                    return select_custom_stack()
+                elif idx == skip_idx:
+                    return {
+                        "type": "skip",
+                        "frontend": "TBD (AI will recommend)",
+                        "backend": "TBD (AI will recommend)",
+                        "database": "TBD (AI will recommend)",
+                        "styling": "TBD (AI will recommend)",
+                        "hosting": "TBD (AI will recommend)",
+                        "extras": []
+                    }
+            
+            # Validate: custom/skip cannot be combined with presets
+            if any(idx in (custom_idx, skip_idx) for idx in indices) and len(indices) > 1:
+                print_error("Custom và Skip không thể kết hợp với preset khác!")
+                continue
+            
+            # Validate preset indices
+            selected_presets = []
+            valid = True
+            for idx in indices:
+                if 1 <= idx <= len(presets):
+                    selected_presets.append(presets[idx - 1])
+                else:
+                    print_error(f"Số {idx} không hợp lệ! Chọn từ 1-{skip_idx}")
+                    valid = False
+                    break
+            
+            if not valid:
+                continue
+            
+            if not selected_presets:
+                print_error("Vui lòng chọn ít nhất 1 preset!")
+                continue
+            
+            if len(selected_presets) > 3:
+                print_error("Chỉ được chọn tối đa 3 presets!")
+                continue
+            
+            # Remove duplicates while keeping order
+            seen_ids = set()
+            unique_presets = []
+            for p in selected_presets:
+                if p["id"] not in seen_ids:
+                    seen_ids.add(p["id"])
+                    unique_presets.append(p)
+            selected_presets = unique_presets
+            
+            # Show confirmation for multi-preset
+            if len(selected_presets) > 1:
+                print(f"\n  📦 Đã chọn {len(selected_presets)} presets:")
+                for p in selected_presets:
+                    print(f"     • {p['name']}")
+                merged_stack = merge_tech_stacks(selected_presets)
+                print(f"\n  🔀 Tech stack kết hợp:")
+                print(f"     Frontend: {merged_stack['frontend']}")
+                print(f"     Backend:  {merged_stack['backend']}")
+                print(f"     Database: {merged_stack['database']}")
+                print(f"     Styling:  {merged_stack['styling']}")
+                print(f"     Hosting:  {merged_stack['hosting']}")
+                if merged_stack['extras']:
+                    print(f"     Extras:   {', '.join(merged_stack['extras'])}")
+                
+                confirm = get_input("\n  Xác nhận? (y/n)", "y")
+                if confirm.lower() != 'y':
+                    continue
+                return merged_stack
+            else:
+                # Single preset
+                preset = selected_presets[0]
                 return {
                     "type": "preset",
                     "preset_name": preset["name"],
@@ -820,25 +924,9 @@ def select_tech_stack(selected_types):
                     "hosting": preset["hosting"],
                     "extras": preset.get("extras", [])
                 }
-            elif idx == custom_idx:
-                # Custom selection
-                return select_custom_stack()
-            elif idx == skip_idx:
-                # Skip - let AI decide later
-                return {
-                    "type": "skip",
-                    "frontend": "TBD (AI will recommend)",
-                    "backend": "TBD (AI will recommend)",
-                    "database": "TBD (AI will recommend)",
-                    "styling": "TBD (AI will recommend)",
-                    "hosting": "TBD (AI will recommend)",
-                    "extras": []
-                }
-            else:
-                print_error(f"Vui lòng nhập số từ 1-{skip_idx}")
                 
         except ValueError:
-            print_error("Vui lòng nhập số hợp lệ!")
+            print_error("Vui lòng nhập số hợp lệ! (ví dụ: 1 hoặc 1,3)")
 
 def select_custom_stack():
     """
@@ -1389,7 +1477,13 @@ def main():
     
     # Show tech stack summary
     if tech_stack.get("type") == "preset":
-        print(f"  Tech Stack: {tech_stack.get('preset_name', 'Preset')}")
+        preset_name = tech_stack.get('preset_name', 'Preset')
+        if ' + ' in preset_name:
+            print(f"  Tech Stack: Multi-preset")
+            for name in preset_name.split(' + '):
+                print(f"    • {name.strip()}")
+        else:
+            print(f"  Tech Stack: {preset_name}")
     elif tech_stack.get("type") == "custom":
         print(f"  Tech Stack: Custom ({tech_stack.get('frontend', '')})")
     else:
