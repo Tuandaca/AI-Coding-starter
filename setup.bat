@@ -32,16 +32,39 @@ echo.
 echo ============================================
 echo    CAU HINH DUONG DAN / PATH CONFIGURATION
 echo ============================================
-set "DEFAULT_BASE=%USERPROFILE%\VibeCoding"
-set /p "USER_BASE=Nhap thu muc lam viec (Enter de dung mac dinh: %DEFAULT_BASE%) / Enter workspace folder [Default]: "
+set "TEMPLATE_DIR="
+set "PROJECTS_DIR="
+
+set "HAS_TEMPLATE=N"
+set /p "HAS_TEMPLATE=Ban da co san thu muc template VibeCoding chua? / Already have template folder? (Y/N) [N]: "
+if /I "%HAS_TEMPLATE%"=="Y" goto SETUP_EXISTING
+
+:SETUP_NEW
+set "DEFAULT_BASE=D:"
+if not exist "D:\" set "DEFAULT_BASE=%USERPROFILE%"
+set "USER_BASE="
+set /p "USER_BASE=Nhap thu muc ban muon cai dat (Enter de dung mac dinh: %DEFAULT_BASE%) / Enter installation folder [Default]: "
 if "%USER_BASE%"=="" set "USER_BASE=%DEFAULT_BASE%"
 
-set "TEMPLATE_DIR=%USER_BASE%\Template"
+set "TEMPLATE_DIR=%USER_BASE%\VibeCoding-Template"
 set "PROJECTS_DIR=%USER_BASE%\Projects"
+goto VERIFY_PATHS
 
+:SETUP_EXISTING
+set "TEMPLATE_DIR="
+set /p "TEMPLATE_DIR=Nhap duong dan den thu muc template (vd: D:\VibeCoding-Template) / Enter template path: "
+if "%TEMPLATE_DIR%"=="" goto SETUP_EXISTING
+
+:: Dat thu muc Projects nam ben canh thu muc template
+for %%I in ("%TEMPLATE_DIR%\..") do set "PARENT_DIR=%%~fI"
+set "PROJECTS_DIR=%PARENT_DIR%\Projects"
+goto VERIFY_PATHS
+
+:VERIFY_PATHS
 if not exist "%TEMPLATE_DIR%" mkdir "%TEMPLATE_DIR%" 2>nul
 if not exist "%PROJECTS_DIR%" mkdir "%PROJECTS_DIR%" 2>nul
-echo [OK] Thu muc lam viec / Workspace: %USER_BASE%
+echo [OK] Thu muc Master Template: %TEMPLATE_DIR%
+echo [OK] Thu muc Projects: %PROJECTS_DIR%
 
 :: GitHub Template Setup
 echo.
@@ -51,8 +74,13 @@ echo ============================================
 set "TEMPLATE_URL=https://github.com/Dokhacgiakhoa/antigravity-ide.git"
 
 :CLONE_RETRY
-if exist "%TEMPLATE_DIR%\.agent" (
-    echo [OK] Master template da ton tai / Master template already exists in: %TEMPLATE_DIR%
+if exist "%TEMPLATE_DIR%\.git" (
+    echo [OK] Master template da ton tai trong / Master template already exists in: %TEMPLATE_DIR%
+    set "DO_UPDATE=Y"
+    set /p "DO_UPDATE=Ban co muon cap nhat template khong? / Do you want to update the template? (Y/N) [Y]: "
+    goto HANDLE_UPDATE_CHOICE
+) else if exist "%TEMPLATE_DIR%\.agent" (
+    echo [OK] Master template da ton tai nhung khong phai Git repo. / Target is not a Git repo.
     goto CLONE_DONE
 )
 
@@ -69,6 +97,17 @@ if errorlevel 1 (
     echo [OK] Da clone master template thanh cong.
     goto CLONE_DONE
 )
+
+:HANDLE_UPDATE_CHOICE
+if /I "%DO_UPDATE%"=="N" goto CLONE_DONE
+echo.
+echo Dang cap nhat master template tu %TEMPLATE_URL%...
+cd /d "%TEMPLATE_DIR%"
+git remote set-url origin "%TEMPLATE_URL%" 2>nul
+git pull
+cd /d "%~dp0"
+echo [OK] Hoan tat cap nhat template / Finished updating template.
+goto CLONE_DONE
 
 :HANDLE_URL_INPUT
 if not "%NEW_URL%"=="" set "TEMPLATE_URL=%NEW_URL%"
