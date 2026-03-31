@@ -22,8 +22,22 @@ from pathlib import Path
 # CONFIGURATION
 # ============================================
 
-MASTER_TEMPLATE_PATH = Path(r"D:\VibeCoding-Template\.agent")
-DEFAULT_PROJECT_PATH = Path(r"D:\Projects")
+import json
+
+CONFIG_FILE = Path(__file__).parent / "config.json"
+if CONFIG_FILE.exists():
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            _config = json.load(f)
+        MASTER_TEMPLATE_PATH = Path(_config.get("MASTER_TEMPLATE_PATH", r"D:\VibeCoding-Template\.agent"))
+        DEFAULT_PROJECT_PATH = Path(_config.get("DEFAULT_PROJECT_PATH", r"D:\Projects"))
+    except Exception:
+        MASTER_TEMPLATE_PATH = Path(r"D:\VibeCoding-Template\.agent")
+        DEFAULT_PROJECT_PATH = Path(r"D:\Projects")
+else:
+    MASTER_TEMPLATE_PATH = Path(r"D:\VibeCoding-Template\.agent")
+    DEFAULT_PROJECT_PATH = Path(r"D:\Projects")
+
 MAX_TYPES = 3
 STARTER_PATH = Path(__file__).parent
 EXTRA_WORKFLOWS = [
@@ -1419,9 +1433,9 @@ def main():
         else:
             print_error(f"Master template not found at: {MASTER_TEMPLATE_PATH}")
             print()
-            print_info("Please clone the template first:")
+            print_info("Please clone the template first by running setup.bat or:")
             print()
-            print(f'    git clone https://github.com/Dokhacgiakhoa/google-antigravity.git "D:\\VibeCoding-Template"')
+            print(f'    git clone https://github.com/Dokhacgiakhoa/antigravity-ide.git "{MASTER_TEMPLATE_PATH.parent}"')
             print()
             sys.exit(1)
     

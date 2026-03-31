@@ -56,30 +56,39 @@ Toàn bộ credit về Multi-Agent System, Skills, và Workflows thuộc về t�
 
 ---
 
-## 🚀 Cài đặt nhanh
+## 🚀 Cài đặt nhanh / Quick Setup
 
-### Windows
+### 🇺🇸 English Instructions
 
-```bash
-# 1. Clone repo này
-git clone https://github.com/Tuandaca/AI-Coding-starter.git
+1. **Clone this repository** (or download as ZIP and extract):
+    ```bash
+    git clone https://github.com/Tuandaca/AI-Coding-starter.git
+    cd AI-Coding-starter
+    ```
 
-# 2. Chạy setup (sẽ tự động clone template gốc)
-cd AI-Coding-starter
-setup.bat
-```
+2. **Run the Setup Wizard**:
+    - **Windows**: Double-click `setup.bat`. You can customize the workspace path and the master template URL during the setup.
+    - **Mac/Linux**: Run `./setup.sh` in the terminal.
 
-### Mac/Linux
+3. **Start the Tool**:
+    - **Windows**: After setup is complete, simply double-click the customized `NewPJ.bat` shortcut to instantly launch the beautiful interactive UI.
+    - You can also run it manually anywhere using `python new_project.py`.
 
-```bash
-# 1. Clone repo này
-git clone https://github.com/Tuandaca/AI-Coding-starter.git
+### 🇻🇳 Hướng dẫn Tiếng Việt
 
-# 2. Chạy setup
-cd AI-Coding-starter
-chmod +x setup.sh
-./setup.sh
-```
+1. **Tải mã nguồn này về** (Dùng lệnh git clone bên dưới hoặc tải file ZIP về giải nén):
+    ```bash
+    git clone https://github.com/Tuandaca/AI-Coding-starter.git
+    cd AI-Coding-starter
+    ```
+
+2. **Chạy trình Cài đặt (Setup Wizard)**:
+    - **Windows**: Nhấn đúp (Double-click) vào file `setup.bat`. Trình cài đặt sẽ cho phép bạn tự định nghĩa thư mục làm việc (mặc định ở ổ C) và tự động kéo hệ thống "Master Template" chứa các Agents. Nếu link tải Agent bị lỗi, script sẽ hỏi bạn nhập link dự phòng.
+    - **Mac/Linux**: Mở terminal, cấp quyền thực thi `chmod +x setup.sh` và chạy `./setup.sh`.
+
+3. **Khởi chạy Hệ thống**:
+    - **Windows**: Sau khi cài ráp thành công, thư mục sẽ xuất hiện 1 file tên là `NewPJ.bat`. Từ giờ mỗi khi cần tạo dự án, bạn chỉ việc bấm đúp vào file này, terminal sẽ được làm sạch tự động để hiện bảng chọn Agent rất trực quan.
+    - **Toàn bộ hệ điều hành**: Gọi thủ công bằng lệnh `python new_project.py`.
 
 ---
 
