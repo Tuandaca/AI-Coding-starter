@@ -1,4 +1,5 @@
 @echo off
+setlocal
 title AI Coding Starter - Setup
 echo.
 echo ============================================
@@ -9,8 +10,8 @@ echo.
 :: Check Python
 python --version >nul 2>&1
 if errorlevel 1 (
-    echo [ERROR] Python chua duoc cai dat!
-    echo Vui long cai dat Python tu: https://python.org
+    echo [ERROR] Python chua duoc cai dat! / Python is not installed!
+    echo Vui long cai dat Python tu / Please install Python from: https://python.org
     pause
     exit /b 1
 )
@@ -19,70 +20,136 @@ echo [OK] Python da cai dat
 :: Check Git
 git --version >nul 2>&1
 if errorlevel 1 (
-    echo [ERROR] Git chua duoc cai dat!
-    echo Vui long cai dat Git tu: https://git-scm.com
+    echo [ERROR] Git chua duoc cai dat! / Git is not installed!
+    echo Vui long cai dat Git tu / Please install Git from: https://git-scm.com
     pause
     exit /b 1
 )
 echo [OK] Git da cai dat
 
-:: Create default folders
+:: Setup Directories
 echo.
-echo Dang tao cac thu muc mac dinh...
+echo ============================================
+echo    CAU HINH DUONG DAN / PATH CONFIGURATION
+echo ============================================
+set "TEMPLATE_DIR="
+set "PROJECTS_DIR="
 
-if not exist "D:\VibeCoding-Template" (
-    echo Dang clone master template...
-    git clone https://github.com/Dokhacgiakhoa/google-antigravity.git "D:\VibeCoding-Template"
-    if errorlevel 1 (
-        echo [ERROR] Khong the clone template!
-        pause
-        exit /b 1
-    )
-    echo [OK] Da clone master template
-) else (
-    echo [OK] Master template da ton tai
+set "HAS_TEMPLATE=N"
+set /p "HAS_TEMPLATE=Ban da co san thu muc template VibeCoding chua? / Already have template folder? (Y/N) [N]: "
+if /I "%HAS_TEMPLATE%"=="Y" goto SETUP_EXISTING
+
+:SETUP_NEW
+set "DEFAULT_BASE=D:"
+if not exist "D:\" set "DEFAULT_BASE=%USERPROFILE%"
+set "USER_BASE="
+set /p "USER_BASE=Nhap thu muc ban muon cai dat (Enter de dung mac dinh: %DEFAULT_BASE%) / Enter installation folder [Default]: "
+if "%USER_BASE%"=="" set "USER_BASE=%DEFAULT_BASE%"
+
+set "TEMPLATE_DIR=%USER_BASE%\VibeCoding-Template"
+set "PROJECTS_DIR=%USER_BASE%\Projects"
+goto VERIFY_PATHS
+
+:SETUP_EXISTING
+set "TEMPLATE_DIR="
+set /p "TEMPLATE_DIR=Nhap duong dan den thu muc template (vd: D:\VibeCoding-Template) / Enter template path: "
+if "%TEMPLATE_DIR%"=="" goto SETUP_EXISTING
+
+:: Dat thu muc Projects nam ben canh thu muc template
+for %%I in ("%TEMPLATE_DIR%\..") do set "PARENT_DIR=%%~fI"
+set "PROJECTS_DIR=%PARENT_DIR%\Projects"
+goto VERIFY_PATHS
+
+:VERIFY_PATHS
+if not exist "%TEMPLATE_DIR%" mkdir "%TEMPLATE_DIR%" 2>nul
+if not exist "%PROJECTS_DIR%" mkdir "%PROJECTS_DIR%" 2>nul
+echo [OK] Thu muc Master Template: %TEMPLATE_DIR%
+echo [OK] Thu muc Projects: %PROJECTS_DIR%
+
+:: GitHub Template Setup
+echo.
+echo ============================================
+echo    CLONE MASTER TEMPLATE
+echo ============================================
+set "TEMPLATE_URL=https://github.com/Dokhacgiakhoa/antigravity-ide.git"
+
+:CLONE_RETRY
+if exist "%TEMPLATE_DIR%\.git" (
+    echo [OK] Master template da ton tai trong / Master template already exists in: %TEMPLATE_DIR%
+    set "DO_UPDATE=Y"
+    set /p "DO_UPDATE=Ban co muon cap nhat template khong? / Do you want to update the template? (Y/N) [Y]: "
+    goto HANDLE_UPDATE_CHOICE
+) else if exist "%TEMPLATE_DIR%\.agent" (
+    echo [OK] Master template da ton tai nhung khong phai Git repo. / Target is not a Git repo.
+    goto CLONE_DONE
 )
 
-if not exist "D:\Projects" (
-    mkdir "D:\Projects"
-    echo [OK] Da tao thu muc D:\Projects
+echo Dang clone master template tu %TEMPLATE_URL%...
+git clone "%TEMPLATE_URL%" "%TEMPLATE_DIR%"
+if errorlevel 1 (
+    echo.
+    echo [ERROR] Khong the clone template tu %TEMPLATE_URL%!
+    echo [ERROR] Cannot clone template!
+    set "NEW_URL="
+    set /p "NEW_URL=Nhap link github moi hoac nhan Enter de thu lai / Enter new GitHub URL or press Enter to retry: "
+    goto HANDLE_URL_INPUT
 ) else (
-    echo [OK] Thu muc D:\Projects da ton tai
+    echo [OK] Da clone master template thanh cong.
+    goto CLONE_DONE
 )
 
-:: Copy new_project.py to accessible location
+:HANDLE_UPDATE_CHOICE
+if /I "%DO_UPDATE%"=="N" goto CLONE_DONE
 echo.
-echo Dang setup...
+echo Dang cap nhat master template tu %TEMPLATE_URL%...
+cd /d "%TEMPLATE_DIR%"
+git remote set-url origin "%TEMPLATE_URL%" 2>nul
+git pull
+cd /d "%~dp0"
+echo [OK] Hoan tat cap nhat template / Finished updating template.
+goto CLONE_DONE
 
-:: Create shortcut in Projects folder
-copy "%~dp0new_project.py" "D:\Projects\new_project.py" >nul 2>&1
+:HANDLE_URL_INPUT
+if not "%NEW_URL%"=="" set "TEMPLATE_URL=%NEW_URL%"
+goto CLONE_RETRY
 
-:: Create batch shortcut in D:\Projects
-echo @echo off > "D:\Projects\NewProject.bat"
-echo title VibeCoding - New Project Creator >> "D:\Projects\NewProject.bat"
-echo python "%~dp0new_project.py" >> "D:\Projects\NewProject.bat"
-echo pause >> "D:\Projects\NewProject.bat"
-echo [OK] Da tao D:\Projects\NewProject.bat
+:CLONE_DONE
 
-:: Create batch shortcut in current folder (same as setup.bat)
-echo @echo off > "%~dp0newProject.bat"
-echo title VibeCoding - New Project Creator >> "%~dp0newProject.bat"
-echo cd /d "%~dp0" >> "%~dp0newProject.bat"
-echo python new_project.py >> "%~dp0newProject.bat"
-echo pause >> "%~dp0newProject.bat"
-echo [OK] Da tao newProject.bat trong thu muc hien tai
+:: Create config.json
+echo.
+echo Dang tao file cau hinh / Creating config file...
+echo {> "%~dp0config.json"
+:: Replace backslashes with double backslashes for JSON
+set "JSON_TEMPLATE_DIR=%TEMPLATE_DIR:\=\\%"
+set "JSON_PROJECTS_DIR=%PROJECTS_DIR:\=\\%"
+echo   "MASTER_TEMPLATE_PATH": "%JSON_TEMPLATE_DIR%\\.agent",>> "%~dp0config.json"
+echo   "DEFAULT_PROJECT_PATH": "%JSON_PROJECTS_DIR%">> "%~dp0config.json"
+echo }>> "%~dp0config.json"
+echo [OK] Da luu cau hinh vao / Saved configuration to: config.json
+
+:: Set up shortcuts
+echo.
+echo ============================================
+echo    TAO SHORTCUT / CREATING SHORTCUTS
+echo ============================================
+
+:: Create local NewPJ.bat
+echo @echo off > "%~dp0NewPJ.bat"
+echo title VibeCoding - New Project Creator >> "%~dp0NewPJ.bat"
+echo cd /d "%%~dp0" >> "%~dp0NewPJ.bat"
+echo cls >> "%~dp0NewPJ.bat"
+echo color 0B >> "%~dp0NewPJ.bat"
+echo python new_project.py >> "%~dp0NewPJ.bat"
+echo pause >> "%~dp0NewPJ.bat"
+echo [OK] Da tao / Created: NewPJ.bat
 
 echo.
 echo ============================================
-echo    SETUP HOAN TAT!
+echo    SETUP HOAN TAT! / SETUP COMPLETED!
 echo ============================================
 echo.
-echo Cac buoc tiep theo:
-echo.
-echo 1. Double-click "newProject.bat" trong thu muc nay de tao du an moi
-echo 2. Hoac mo D:\Projects va click "NewProject.bat"
-echo 3. Mo du an trong Antigravity IDE
-echo.
-echo ============================================
+echo Cac buoc tiep theo / Next steps:
+echo 1. Double-click "NewPJ.bat" trong thu muc nay de tao du an moi.
+echo 2. Chon cac template agents phu hop theo giao dien.
 echo.
 pause
