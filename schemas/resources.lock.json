@@ -1,0 +1,228 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-coding-starter.dev/schemas/resources.lock.json",
+  "title": "ResourcesLock",
+  "description": "Resolved resource identity/version/provenance — lockfile for reproducible resource selection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "lockfile_version", "resources"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Schema version for the resources lockfile"
+    },
+    "lockfile_version": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "Lockfile format version (increment on breaking changes)"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this lockfile was generated"
+    },
+    "generated_by": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+      "description": "Tool/component that generated this lockfile (e.g., 'ai-coding-starter-generator')"
+    },
+    "catalog_version": {
+      "type": "string",
+      "description": "Version of the catalog used for resolution (e.g., '2026.01', git commit SHA)"
+    },
+    "resources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "type", "version", "provenance"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+            "description": "Resource ID from catalog"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["agent", "skill", "rule", "workflow", "script", "template", "instruction", "shared-module"],
+            "description": "Resource type"
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^\\d+(\\.\\d+)*(-[a-zA-Z0-9.-]+)?$",
+            "description": "Resolved resource version"
+          },
+          "provenance": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["source", "commit_sha"],
+            "properties": {
+              "source": {
+                "type": "string",
+                "enum": ["bundled", "agency-agents", "custom", "community"],
+                "description": "Origin source"
+              },
+              "upstream_repo": {
+                "type": "string",
+                "format": "uri",
+                "description": "Upstream repository URL"
+              },
+              "commit_sha": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{40}$",
+                "description": "Exact commit SHA for reproducibility"
+              },
+              "license": {
+                "type": "string",
+                "description": "License identifier"
+              },
+              "imported_date": {
+                "type": "string",
+                "format": "date",
+                "description": "When imported into local catalog"
+              },
+              "reviewed_date": {
+                "type": "string",
+                "format": "date",
+                "description": "Last review date"
+              },
+              "transformation": {
+                "type": "string",
+                "description": "Description of any transformation applied (if not direct copy)"
+              }
+            },
+            "description": "Provenance metadata for this specific resource instance"
+          },
+          "runtime_representations": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "format": {
+                  "type": "string",
+                  "description": "Runtime-specific format"
+                },
+                "output_path": {
+                  "type": "string",
+                  "description": "Generated output path for this runtime"
+                },
+                "content_hash": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$",
+                  "description": "SHA-256 hash of generated content for change detection"
+                }
+              }
+            },
+            "description": "Runtime-specific generated representations"
+          },
+          "selection_reason": {
+            "type": "string",
+            "description": "Why this resource was selected (e.g., 'core team', 'capability:authentication', 'project-type:saas')"
+          }
+        }
+      },
+      "description": "Locked resource selections with full provenance"
+    },
+    "stack_bundle_resolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requested_bundle": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+        },
+        "resolved_bundle": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+        },
+        "technology_versions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^\\d+(\\.\\d+)*(-[a-zA-Z0-9.-]+)?$"
+          },
+          "description": "Resolved technology versions for this project"
+        },
+        "compatibility_warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Non-blocking compatibility warnings from resolution"
+        }
+      },
+      "description": "Stack bundle resolution metadata"
+    }
+  },
+  "examples": [
+    {
+      "schema_version": "1.0.0",
+      "lockfile_version": 1,
+      "generated_at": "2026-01-15T10:30:00Z",
+      "generated_by": "ai-coding-starter-generator",
+      "catalog_version": "2026.01-a1b2c3d",
+      "resources": [
+        {
+          "id": "project-planner",
+          "type": "agent",
+          "version": "1.0.0",
+          "provenance": {
+            "source": "bundled",
+            "commit_sha": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
+            "license": "MIT",
+            "imported_date": "2026-01-01",
+            "reviewed_date": "2026-01-01"
+          },
+          "runtime_representations": {
+            "codex": {
+              "format": "agent-md",
+              "output_path": ".codex/agents/project-planner.md",
+              "content_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "opencode": {
+              "format": "agent-md",
+              "output_path": ".opencode/agent/project-planner.md",
+              "content_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          },
+          "selection_reason": "core team"
+        },
+        {
+          "id": "api-documenter",
+          "type": "skill",
+          "version": "1.0.0",
+          "provenance": {
+            "source": "agency-agents",
+            "upstream_repo": "https://github.com/msitarzewski/agency-agents",
+            "commit_sha": "f1e2d3c4b5a697887766554433221100ffeeddcc",
+            "license": "MIT",
+            "imported_date": "2026-02-01",
+            "reviewed_date": "2026-02-01"
+          },
+          "runtime_representations": {
+            "codex": {
+              "format": "skill-md",
+              "output_path": ".codex/skills/api-documenter.md",
+              "content_hash": "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456"
+            }
+          },
+          "selection_reason": "capability:api-documentation"
+        }
+      ],
+      "stack_bundle_resolution": {
+        "requested_bundle": "nextjs-supabase",
+        "resolved_bundle": "nextjs-supabase",
+        "technology_versions": {
+          "nextjs": "14.2.0",
+          "postgresql": "16.2",
+          "supabase": "2.39.0",
+          "tailwindcss": "3.4.0"
+        },
+        "compatibility_warnings": []
+      }
+    }
+  ]
+}

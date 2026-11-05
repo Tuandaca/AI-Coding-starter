@@ -1,0 +1,221 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-coding-starter.dev/schemas/state.yaml.json",
+  "title": "ProjectState",
+  "description": "Portable workflow/session state — task progress, focus, decisions pointer",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "state"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Schema version for the state specification"
+    },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "phase": {
+          "type": "string",
+          "enum": ["not-started", "planning", "architecture", "development", "testing", "staging", "production", "maintenance"],
+          "default": "planning",
+          "description": "Current project phase"
+        },
+        "focus": {
+          "type": "string",
+          "maxLength": 512,
+          "default": "",
+          "description": "Current focus area or task description"
+        },
+        "active_tasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "title", "status"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+              },
+              "title": {
+                "type": "string",
+                "maxLength": 256
+              },
+              "status": {
+                "type": "string",
+                "enum": ["pending", "in-progress", "blocked", "done", "cancelled"]
+              },
+              "assignee": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+                "description": "Resource ID of assigned agent (optional)"
+              },
+              "due_date": {
+                "type": "string",
+                "format": "date",
+                "description": "Optional due date"
+              }
+            }
+          },
+          "default": [],
+          "description": "Active task list"
+        },
+        "completed_tasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "title", "completed_at"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+              },
+              "title": {
+                "type": "string",
+                "maxLength": 256
+              },
+              "completed_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "outcome": {
+                "type": "string",
+                "maxLength": 512
+              }
+            }
+          },
+          "default": [],
+          "description": "Completed task history"
+        },
+        "decisions_pointer": {
+          "type": "string",
+          "default": "DECISIONS.md",
+          "description": "Path to architecture decision log (append-only)"
+        },
+        "handoff_pointer": {
+          "type": "string",
+          "default": "HANDOFF.md",
+          "description": "Path to continuation summary"
+        },
+        "canonical_branch": {
+          "type": "string",
+          "description": "Git branch ref for the canonical project state (for worktree coordination)"
+        },
+        "active_worktrees": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "purpose", "branch"],
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "Worktree path relative to repo root"
+              },
+              "purpose": {
+                "type": "string",
+                "maxLength": 256,
+                "description": "Purpose of this worktree (e.g., 'feature/auth', 'bugfix/login')"
+              },
+              "branch": {
+                "type": "string",
+                "description": "Git branch name"
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "owner_agent": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+                "description": "Agent responsible for this worktree (optional)"
+              }
+            }
+          },
+          "default": [],
+          "description": "Active git worktrees for parallel work"
+        },
+        "last_session": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ended_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "summary": {
+              "type": "string",
+              "maxLength": 1024
+            },
+            "next_steps": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 256
+              }
+            }
+          },
+          "description": "Previous session summary for continuity"
+        }
+      },
+      "description": "Session/workflow state — portable across runtimes"
+    }
+  },
+  "examples": [
+    {
+      "schema_version": "1.0.0",
+      "state": {
+        "phase": "development",
+        "focus": "Implementing user authentication flow with NextAuth",
+        "active_tasks": [
+          {
+            "id": "setup-nextauth",
+            "title": "Configure NextAuth with Supabase provider",
+            "status": "in-progress",
+            "assignee": "backend-engineer"
+          },
+          {
+            "id": "create-login-page",
+            "title": "Build login/register UI components",
+            "status": "pending",
+            "assignee": "frontend-engineer"
+          }
+        ],
+        "completed_tasks": [
+          {
+            "id": "init-project",
+            "title": "Initialize project with nextjs-supabase bundle",
+            "completed_at": "2026-01-15T10:30:00Z",
+            "outcome": "Project scaffolded, dependencies installed"
+          },
+          {
+            "id": "setup-database",
+            "title": "Configure Supabase database schema",
+            "completed_at": "2026-01-16T09:15:00Z",
+            "outcome": "Users, sessions, subscriptions tables created"
+          }
+        ],
+        "decisions_pointer": "DECISIONS.md",
+        "handoff_pointer": "HANDOFF.md",
+        "canonical_branch": "main",
+        "active_worktrees": [
+          {
+            "path": ".worktrees/feature-auth",
+            "purpose": "Feature: User authentication",
+            "branch": "feature/auth",
+            "created_at": "2026-01-17T08:00:00Z",
+            "owner_agent": "backend-engineer"
+          }
+        ],
+        "last_session": {
+          "ended_at": "2026-01-19T18:30:00Z",
+          "summary": "Completed database schema, started NextAuth configuration",
+          "next_steps": ["Finish NextAuth setup", "Create login page", "Add protected routes"]
+        }
+      }
+    }
+  ]
+}

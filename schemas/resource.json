@@ -1,0 +1,223 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-coding-starter.dev/schemas/resource.json",
+  "title": "Resource",
+  "description": "Portable resource identity — canonical resource identity != runtime-specific representation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "type", "schema_version"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Schema version for this contract"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+      "minLength": 2,
+      "maxLength": 64,
+      "description": "Stable, lowercase kebab-case identifier (e.g., 'code-reviewer', 'api-documenter')"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Human-readable display name"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "agent",
+        "skill",
+        "rule",
+        "workflow",
+        "script",
+        "template",
+        "instruction",
+        "shared-module"
+      ],
+      "description": "Resource type classification"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "description": "Description of what this resource provides"
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+      },
+      "uniqueItems": true,
+      "default": [],
+      "description": "Capability IDs this resource supports or enables"
+    },
+    "project_types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+      },
+      "uniqueItems": true,
+      "default": [],
+      "description": "Project type IDs where this resource is relevant"
+    },
+    "stack_bundles": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+      },
+      "uniqueItems": true,
+      "default": [],
+      "description": "Stack bundle IDs where this resource is recommended"
+    },
+    "runtime_adapters": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "format": {
+            "type": "string",
+            "description": "Runtime-specific format identifier (e.g., 'agent-md', 'skill-yaml')"
+          },
+          "path_template": {
+            "type": "string",
+            "description": "Template for runtime-specific output path"
+          },
+          "transform_hints": {
+            "type": "object",
+            "description": "Hints for transforming canonical resource to runtime format"
+          }
+        }
+      },
+      "default": {},
+      "description": "Runtime-specific representation metadata — canonical identity maps to different formats per runtime"
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": ["bundled", "agency-agents", "custom", "community"],
+          "description": "Origin of this resource"
+        },
+        "upstream_repo": {
+          "type": "string",
+          "format": "uri",
+          "description": "Upstream repository URL if imported"
+        },
+        "upstream_commit": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$",
+          "description": "Upstream commit SHA for reproducibility"
+        },
+        "license": {
+          "type": "string",
+          "description": "License identifier (SPDX preferred)"
+        },
+        "imported_date": {
+          "type": "string",
+          "format": "date",
+          "description": "Date this resource was imported into the catalog"
+        },
+        "reviewed_date": {
+          "type": "string",
+          "format": "date",
+          "description": "Last review date for currency"
+        }
+      },
+      "description": "Source provenance metadata for traceability"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+(\\.\\d+)*(-[a-zA-Z0-9.-]+)?$",
+      "default": "1.0.0",
+      "description": "Resource version (semantic versioning preferred)"
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+      },
+      "uniqueItems": true,
+      "default": [],
+      "description": "Other resource IDs this resource depends on"
+    }
+  },
+  "examples": [
+    {
+      "schema_version": "1.0.0",
+      "id": "code-reviewer",
+      "name": "Code Reviewer Agent",
+      "type": "agent",
+      "description": "Reviews code for quality, security, and adherence to project standards",
+      "capabilities": ["code-review", "security-audit"],
+      "project_types": ["saas", "ecommerce", "fullstack-app", "backend-api"],
+      "stack_bundles": ["nextjs-supabase", "fastapi-postgres", "dotnet-postgres"],
+      "runtime_adapters": {
+        "codex": {
+          "format": "agent-md",
+          "path_template": ".codex/agents/code-reviewer.md"
+        },
+        "opencode": {
+          "format": "agent-md",
+          "path_template": ".opencode/agent/code-reviewer.md"
+        },
+        "antigravity": {
+          "format": "agent-md",
+          "path_template": ".agent/agents/code-reviewer.md"
+        },
+        "claude-code": {
+          "format": "claude-md",
+          "path_template": ".claude/agents/code-reviewer.md"
+        }
+      },
+      "provenance": {
+        "source": "bundled",
+        "license": "MIT",
+        "imported_date": "2026-01-15",
+        "reviewed_date": "2026-01-15",
+        "upstream_commit": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"
+      },
+      "version": "1.0.0",
+      "dependencies": []
+    },
+    {
+      "schema_version": "1.0.0",
+      "id": "api-documenter",
+      "name": "API Documenter Skill",
+      "type": "skill",
+      "description": "Generates and maintains OpenAPI/Swagger documentation from code",
+      "capabilities": ["api-documentation"],
+      "project_types": ["backend-api", "saas", "fullstack-app"],
+      "stack_bundles": ["nextjs-supabase", "fastapi-postgres", "dotnet-postgres", "go-react"],
+      "runtime_adapters": {
+        "codex": {
+          "format": "skill-md",
+          "path_template": ".codex/skills/api-documenter.md"
+        },
+        "opencode": {
+          "format": "skill-md",
+          "path_template": ".opencode/skill/api-documenter.md"
+        }
+      },
+      "provenance": {
+        "source": "agency-agents",
+        "upstream_repo": "https://github.com/msitarzewski/agency-agents",
+        "upstream_commit": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
+        "license": "MIT",
+        "imported_date": "2026-02-01",
+        "reviewed_date": "2026-02-01"
+      },
+      "version": "1.0.0",
+      "dependencies": []
+    }
+  ]
+}

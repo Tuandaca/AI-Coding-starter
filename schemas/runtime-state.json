@@ -1,0 +1,168 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-coding-starter.dev/schemas/runtime-state.json",
+  "title": "RuntimeState",
+  "description": "Local/runtime-derived ephemeral state — non-authoritative, derived from portable state + runtime context",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "runtime_id", "derived_at"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Schema version for the runtime state"
+    },
+    "runtime_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+      "description": "Runtime adapter ID this state belongs to"
+    },
+    "derived_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this runtime state was derived from portable state"
+    },
+    "source_project_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA-256 hash of project.yaml at derivation time (for staleness detection)"
+    },
+    "source_state_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA-256 hash of state.yaml at derivation time"
+    },
+    "source_resources_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA-256 hash of resources.lock at derivation time"
+    },
+    "installed_adapters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["resource_id", "output_path", "content_hash"],
+        "properties": {
+          "resource_id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+          },
+          "output_path": {
+            "type": "string",
+            "description": "Path where resource was installed"
+          },
+          "content_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "SHA-256 of installed content"
+          },
+          "installed_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "default": [],
+      "description": "Resources installed for this runtime"
+    },
+    "runtime_config": {
+      "type": "object",
+      "description": "Runtime-specific configuration (opaque to core, derived from portable preferences)"
+    },
+    "mcp_servers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "env": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "default": [],
+      "description": "MCP server configurations for this runtime"
+    },
+    "hooks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "event": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      },
+      "default": [],
+      "description": "Hook configurations for this runtime"
+    },
+    "ephemeral": {
+      "type": "object",
+      "description": "Runtime-specific ephemeral data (caches, session tokens, etc.) — NEVER authoritative"
+    }
+  },
+  "examples": [
+    {
+      "schema_version": "1.0.0",
+      "runtime_id": "codex",
+      "derived_at": "2026-01-20T14:45:00Z",
+      "source_project_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "source_state_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "source_resources_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "installed_adapters": [
+        {
+          "resource_id": "project-planner",
+          "output_path": ".codex/agents/project-planner.md",
+          "content_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "installed_at": "2026-01-20T14:45:00Z"
+        },
+        {
+          "resource_id": "code-reviewer",
+          "output_path": ".codex/agents/code-reviewer.md",
+          "content_hash": "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456",
+          "installed_at": "2026-01-20T14:45:00Z"
+        }
+      ],
+      "runtime_config": {
+        "agent_model": "gpt-4",
+        "auto_approve": false
+      },
+      "mcp_servers": [
+        {
+          "name": "codebase-memory",
+          "command": "npx",
+          "args": ["-y", "@codebase-memory/mcp-server"],
+          "env": {}
+        }
+      ],
+      "hooks": [],
+      "ephemeral": {
+        "last_sync": "2026-01-20T14:45:00Z",
+        "session_id": "ses_abc123"
+      }
+    }
+  ]
+}

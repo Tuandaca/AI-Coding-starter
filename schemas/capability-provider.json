@@ -1,0 +1,217 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-coding-starter.dev/schemas/capability-provider.json",
+  "title": "CapabilityProvider",
+  "description": "Optional provider for a capability — preferred provider with fallback chain",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "capability", "priority", "schema_version"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Schema version for this contract"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+      "minLength": 2,
+      "maxLength": 64,
+      "description": "Stable, lowercase kebab-case identifier (e.g., 'codebase-memory', 'agent-reach', 'source-scan')"
+    },
+    "capability": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+      "description": "Capability ID this provider implements (e.g., 'code-intelligence', 'research-web')"
+    },
+    "priority": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "description": "Priority order (lower = higher priority). Preferred provider = 1, fallbacks = 2, 3, ..."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Human-readable display name"
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 512,
+      "description": "Description of what this provider does"
+    },
+    "availability": {
+      "type": "string",
+      "enum": ["bundled", "external-install", "external-service", "runtime-native"],
+      "default": "external-install",
+      "description": "How this provider is made available"
+    },
+    "health_check": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "type": "string",
+          "description": "Command to verify provider is functional"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300,
+          "default": 30,
+          "description": "Health check timeout"
+        },
+        "expected_output": {
+          "type": "string",
+          "description": "Expected output pattern for success"
+        }
+      },
+      "description": "Health check configuration for verifying provider availability"
+    },
+    "requirements": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Prerequisites (e.g., 'Docker', 'Node.js 18+', 'API key')"
+    },
+    "fallback": {
+      "type": ["string", "null"],
+      "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+      "description": "Provider ID to fall back to if this provider is unavailable (null if none)"
+    },
+    "optional": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this provider is optional (absence must not block project creation)"
+    },
+    "configuration": {
+      "type": "object",
+      "description": "Provider-specific configuration schema (opaque to core)"
+    }
+  },
+  "examples": [
+    {
+      "schema_version": "1.0.0",
+      "id": "codebase-memory",
+      "capability": "code-intelligence",
+      "priority": 1,
+      "name": "Codebase Memory MCP",
+      "description": "First-class code intelligence via MCP — semantic search, symbol navigation, dependency graphs",
+      "availability": "external-install",
+      "health_check": {
+        "command": "cbm --version",
+        "timeout_seconds": 10,
+        "expected_output": "cbm version"
+      },
+      "requirements": ["Docker", "Node.js 18+", "Git repository"],
+      "fallback": "source-scan",
+      "optional": true,
+      "configuration": {
+        "index_path": ".codebase-memory/index",
+        "ignore_patterns": ["node_modules", "dist", "build", ".git"]
+      }
+    },
+    {
+      "schema_version": "1.0.0",
+      "id": "source-scan",
+      "capability": "code-intelligence",
+      "priority": 2,
+      "name": "Source Code Scanner",
+      "description": "Fallback code intelligence via static analysis — grep, ctags, LSP",
+      "availability": "runtime-native",
+      "health_check": {
+        "command": "which ctags || which rg",
+        "timeout_seconds": 5,
+        "expected_output": ""
+      },
+      "requirements": ["ripgrep or ctags"],
+      "fallback": null,
+      "optional": true,
+      "configuration": {}
+    },
+    {
+      "schema_version": "1.0.0",
+      "id": "agent-reach",
+      "capability": "research-web",
+      "priority": 1,
+      "name": "Agent Reach",
+      "description": "Web research via browser automation — authenticated sessions with explicit consent",
+      "availability": "external-install",
+      "health_check": {
+        "command": "agent-reach --version",
+        "timeout_seconds": 10,
+        "expected_output": "agent-reach version"
+      },
+      "requirements": ["Python 3.10+", "Playwright browsers", "Explicit user consent for auth"],
+      "fallback": "runtime-native-search",
+      "optional": true,
+      "configuration": {
+        "auth_mode": "explicit-consent-only",
+        "read_only": true
+      }
+    },
+    {
+      "schema_version": "1.0.0",
+      "id": "runtime-native-search",
+      "capability": "research-web",
+      "priority": 2,
+      "name": "Runtime Native Search",
+      "description": "Fallback to runtime's built-in web search capability",
+      "availability": "runtime-native",
+      "health_check": {
+        "command": "echo 'native'",
+        "timeout_seconds": 1,
+        "expected_output": "native"
+      },
+      "requirements": [],
+      "fallback": null,
+      "optional": true,
+      "configuration": {}
+    },
+    {
+      "schema_version": "1.0.0",
+      "id": "orca",
+      "capability": "orchestration",
+      "priority": 1,
+      "name": "Orca Desktop Orchestrator",
+      "description": "Parallel agent orchestration via git worktrees — desktop app",
+      "availability": "external-install",
+      "health_check": {
+        "command": "orca --version",
+        "timeout_seconds": 10,
+        "expected_output": "orca version"
+      },
+      "requirements": ["Git 2.30+", "Desktop environment", "Explicit permission selection (NO yolo/auto-bypass)"],
+      "fallback": "git-worktree",
+      "optional": true,
+      "configuration": {
+        "worktree_base": ".worktrees",
+        "max_parallel": 4,
+        "permission_mode": "manual"
+      }
+    },
+    {
+      "schema_version": "1.0.0",
+      "id": "git-worktree",
+      "capability": "orchestration",
+      "priority": 2,
+      "name": "Git Worktree Orchestration",
+      "description": "Fallback orchestration via native git worktrees",
+      "availability": "runtime-native",
+      "health_check": {
+        "command": "git worktree --help",
+        "timeout_seconds": 5,
+        "expected_output": "usage:"
+      },
+      "requirements": ["Git 2.30+"],
+      "fallback": null,
+      "optional": true,
+      "configuration": {
+        "worktree_base": ".worktrees"
+      }
+    }
+  ]
+}

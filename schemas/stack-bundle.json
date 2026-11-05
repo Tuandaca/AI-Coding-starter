@@ -1,0 +1,210 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-coding-starter.dev/schemas/stack-bundle.json",
+  "title": "StackBundle",
+  "description": "One coherent, validated technology combination — NOT an arbitrary list of unrelated presets",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "description", "technologies", "schema_version"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Schema version for this contract"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+      "minLength": 2,
+      "maxLength": 64,
+      "description": "Stable, lowercase kebab-case identifier (e.g., 'nextjs-supabase', 'fastapi-postgres')"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Human-readable display name"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "description": "Description of what this stack bundle provides and its design goals"
+    },
+    "project_types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+      },
+      "uniqueItems": true,
+      "minItems": 1,
+      "description": "Project type IDs this bundle is suitable for"
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+      },
+      "uniqueItems": true,
+      "default": [],
+      "description": "Capability IDs this bundle satisfies out of the box"
+    },
+    "technologies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["frontend", "backend", "database"],
+      "properties": {
+        "frontend": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+          "description": "Primary frontend technology ID"
+        },
+        "backend": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+          "description": "Primary backend technology ID (or 'none' for static)"
+        },
+        "database": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+          "description": "Primary database technology ID (or 'none')"
+        },
+        "orm": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+          "description": "ORM technology ID (optional)"
+        },
+        "cache": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+          "description": "Cache technology ID (optional)"
+        },
+        "queue": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+          "description": "Queue/background job technology ID (optional)"
+        },
+        "search": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+          "description": "Search technology ID (optional)"
+        },
+        "auth": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+          "description": "Authentication technology ID (optional)"
+        },
+        "payments": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+          "description": "Payments technology ID (optional)"
+        },
+        "ai": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+          "description": "AI/ML framework technology ID (optional)"
+        },
+        "vector_database": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+          "description": "Vector database technology ID (optional)"
+        },
+        "hosting": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+          "description": "Primary hosting platform technology ID"
+        },
+        "styling": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+          "description": "Styling/CSS framework technology ID (optional)"
+        },
+        "testing": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+          "description": "Testing framework technology ID (optional)"
+        }
+      },
+      "description": "Technology assignments by role — each value is a stable technology ID"
+    },
+    "profile": {
+      "type": "string",
+      "enum": ["fastest-mvp", "balanced", "scalable", "minimal", "custom"],
+      "default": "balanced",
+      "description": "Target profile characterizing the bundle's design priorities"
+    },
+    "constraints": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Human-readable constraint notes (e.g., 'requires Docker', 'Vercel-only deployment')"
+    },
+    "tradeoffs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Known tradeoffs vs other bundles (e.g., 'vendor lock-in on Supabase', 'higher ops complexity')"
+    },
+    "incompatible_with": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+      },
+      "uniqueItems": true,
+      "default": [],
+      "description": "Stack bundle IDs that cannot be combined with this bundle"
+    }
+  },
+  "examples": [
+    {
+      "schema_version": "1.0.0",
+      "id": "nextjs-supabase",
+      "name": "Next.js + Supabase",
+      "description": "Full-stack React with BaaS — fastest path to authenticated, realtime SaaS",
+      "project_types": ["saas", "ecommerce", "fullstack-app", "dashboard"],
+      "capabilities": ["authentication", "authorization", "database", "realtime", "file-upload", "email"],
+      "technologies": {
+        "frontend": "nextjs",
+        "backend": "nextjs",
+        "database": "postgresql",
+        "orm": "supabase-client",
+        "auth": "supabase-auth",
+        "hosting": "vercel",
+        "styling": "tailwindcss"
+      },
+      "profile": "fastest-mvp",
+      "constraints": ["Supabase vendor lock-in for auth/realtime", "Vercel recommended for hosting"],
+      "tradeoffs": ["Less control over auth schema", "Realtime tied to Supabase"],
+      "incompatible_with": ["nextjs-dotnet-postgres", "mern-stack"]
+    },
+    {
+      "schema_version": "1.0.0",
+      "id": "fastapi-postgres",
+      "name": "FastAPI + PostgreSQL",
+      "description": "Python backend with relational database — type-safe, performant, cloud-agnostic",
+      "project_types": ["backend-api", "ai-rag", "ai-agent", "saas"],
+      "capabilities": ["api", "database", "background-jobs", "cache"],
+      "technologies": {
+        "frontend": "none",
+        "backend": "fastapi",
+        "database": "postgresql",
+        "orm": "sqlalchemy",
+        "cache": "redis",
+        "queue": "celery",
+        "hosting": "railway",
+        "testing": "pytest"
+      },
+      "profile": "balanced",
+      "constraints": ["Requires Python runtime", "Separate frontend needed for web apps"],
+      "tradeoffs": ["No built-in auth — bring your own", "Manual frontend integration"],
+      "incompatible_with": ["nextjs-supabase", "dotnet-postgres"]
+    }
+  ]
+}

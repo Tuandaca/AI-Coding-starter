@@ -1,0 +1,210 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-coding-starter.dev/schemas/execution-pack.json",
+  "title": "ExecutionPack",
+  "description": "Team execution pack — defines roles and activation conditions for a working mode",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "description", "schema_version"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Schema version for this contract"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+      "minLength": 2,
+      "maxLength": 64,
+      "description": "Stable, lowercase kebab-case identifier (e.g., 'startup-mvp', 'security-audit')"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Human-readable display name"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "description": "Description of what this execution pack is for"
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["continuous", "time-boxed", "event-driven", "on-demand"],
+      "default": "continuous",
+      "description": "Execution mode for this pack"
+    },
+    "duration": {
+      "type": "string",
+      "description": "Estimated duration (e.g., '2-4 weeks', 'ongoing', '1-2 days')"
+    },
+    "summary": {
+      "type": "string",
+      "maxLength": 1024,
+      "description": "Brief summary of the pack's purpose and approach"
+    },
+    "core_roles": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+      },
+      "uniqueItems": true,
+      "minItems": 1,
+      "description": "Resource IDs of agents that are always active in this pack"
+    },
+    "optional_roles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["resource_id", "activation"],
+        "properties": {
+          "resource_id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+            "description": "Resource ID of the specialist agent"
+          },
+          "activation": {
+            "type": "string",
+            "enum": ["always", "as-needed", "post-fix", "capability-triggered", "stack-triggered"],
+            "description": "When this specialist should be activated"
+          },
+          "trigger_capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+            },
+            "description": "Capability IDs that trigger this specialist (when activation is 'capability-triggered')"
+          },
+          "trigger_stack_bundles": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+            },
+            "description": "Stack bundle IDs that trigger this specialist (when activation is 'stack-triggered')"
+          }
+        }
+      },
+      "default": [],
+      "description": "Specialist agents activated conditionally"
+    },
+    "activation_conditions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "project_types": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+          },
+          "description": "Project types where this pack is applicable"
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+          },
+          "description": "Required capabilities for this pack"
+        },
+        "stack_bundles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+          },
+          "description": "Stack bundles where this pack is recommended"
+        }
+      },
+      "description": "Conditions under which this pack is recommended"
+    },
+    "quality_gates": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Quality gate descriptions (e.g., 'All tests pass', 'Security scan clean')"
+    },
+    "workflow": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Workflow step descriptions or references to workflow resources"
+    }
+  },
+  "examples": [
+    {
+      "schema_version": "1.0.0",
+      "id": "startup-mvp",
+      "name": "Startup MVP",
+      "description": "Rapid validation of product-market fit with minimal viable product",
+      "mode": "time-boxed",
+      "duration": "4-8 weeks",
+      "summary": "Small core team builds and ships MVP fast. Specialists engaged only for critical path items.",
+      "core_roles": ["project-planner", "fullstack-engineer", "code-reviewer"],
+      "optional_roles": [
+        {
+          "resource_id": "payments-engineer",
+          "activation": "capability-triggered",
+          "trigger_capabilities": ["payments", "subscriptions"]
+        },
+        {
+          "resource_id": "security-auditor",
+          "activation": "post-fix",
+          "trigger_capabilities": []
+        },
+        {
+          "resource_id": "deployment-engineer",
+          "activation": "as-needed",
+          "trigger_capabilities": []
+        }
+      ],
+      "activation_conditions": {
+        "project_types": ["saas", "ecommerce", "fullstack-app", "ai-rag"],
+        "capabilities": [],
+        "stack_bundles": ["nextjs-supabase", "fastapi-postgres", "nextjs-dotnet-postgres"]
+      },
+      "quality_gates": ["Core user flow works end-to-end", "Deployed to staging", "Basic error handling"],
+      "workflow": ["discovery", "architecture", "core-development", "integration", "staging-deploy", "user-testing"]
+    },
+    {
+      "schema_version": "1.0.0",
+      "id": "security-audit",
+      "name": "Security Audit",
+      "description": "Comprehensive security review of codebase and infrastructure",
+      "mode": "time-boxed",
+      "duration": "1-2 weeks",
+      "summary": "Security specialist leads audit with support from backend and infrastructure engineers.",
+      "core_roles": ["security-auditor", "backend-engineer", "code-reviewer"],
+      "optional_roles": [
+        {
+          "resource_id": "infrastructure-engineer",
+          "activation": "as-needed",
+          "trigger_capabilities": []
+        },
+        {
+          "resource_id": "privacy-engineer",
+          "activation": "capability-triggered",
+          "trigger_capabilities": ["gdpr-compliance", "data-protection"]
+        }
+      ],
+      "activation_conditions": {
+        "project_types": ["saas", "ecommerce", "backend-api", "fullstack-app"],
+        "capabilities": ["authentication", "authorization"],
+        "stack_bundles": []
+      },
+      "quality_gates": ["No critical vulnerabilities", "OWASP Top 10 addressed", "Secrets scan clean", "Dependency audit clean"],
+      "workflow": ["threat-modeling", "static-analysis", "dependency-audit", "runtime-testing", "report-generation"]
+    }
+  ]
+}

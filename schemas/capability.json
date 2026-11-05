@@ -1,0 +1,117 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-coding-starter.dev/schemas/capability.json",
+  "title": "Capability",
+  "description": "Canonical contract for a capability — what the project needs to do, not which vendor implements it",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "description", "schema_version"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Schema version for this contract"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+      "minLength": 2,
+      "maxLength": 64,
+      "description": "Stable, lowercase kebab-case identifier (e.g., 'authentication', 'file-upload')"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Human-readable display name"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "description": "Description of what this capability provides"
+    },
+    "category": {
+      "type": "string",
+      "enum": ["core", "data", "ai", "integration", "infrastructure", "ux", "security", "operations"],
+      "default": "core",
+      "description": "High-level category for grouping capabilities"
+    },
+    "example_implementations": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+      },
+      "uniqueItems": true,
+      "default": [],
+      "description": "Technology IDs that can implement this capability (informational only)"
+    },
+    "requires": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+      },
+      "uniqueItems": true,
+      "default": [],
+      "description": "Capability IDs that must also be present when this capability is selected"
+    },
+    "conflicts": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+      },
+      "uniqueItems": true,
+      "default": [],
+      "description": "Capability IDs that cannot coexist with this capability"
+    },
+    "implies": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+      },
+      "uniqueItems": true,
+      "default": [],
+      "description": "Capability IDs that are implicitly satisfied when this capability is selected"
+    },
+    "recommended_for": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+      },
+      "uniqueItems": true,
+      "default": [],
+      "description": "Project type IDs where this capability is commonly needed"
+    }
+  },
+  "examples": [
+    {
+      "schema_version": "1.0.0",
+      "id": "authentication",
+      "name": "Authentication",
+      "description": "User identity verification and session management",
+      "category": "security",
+      "example_implementations": ["nextauth", "supabase-auth", "aspnet-identity", "firebase-auth"],
+      "requires": [],
+      "conflicts": [],
+      "implies": ["authorization"],
+      "recommended_for": ["saas", "ecommerce", "fullstack-app", "dashboard"]
+    },
+    {
+      "schema_version": "1.0.0",
+      "id": "vector-search",
+      "name": "Vector Search",
+      "description": "Semantic similarity search over embeddings",
+      "category": "ai",
+      "example_implementations": ["pgvector", "pinecone", "weaviate", "qdrant"],
+      "requires": ["ai"],
+      "conflicts": [],
+      "implies": [],
+      "recommended_for": ["ai-rag", "ai-agent", "saas"]
+    }
+  ]
+}

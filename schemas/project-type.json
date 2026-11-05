@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-coding-starter.dev/schemas/project-type.json",
+  "title": "ProjectType",
+  "description": "Canonical contract for a project type — what kind of product is being built",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "description", "schema_version"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Schema version for this contract"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+      "minLength": 2,
+      "maxLength": 64,
+      "description": "Stable, lowercase kebab-case identifier (e.g., 'saas', 'fullstack-app')"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Human-readable display name"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "description": "Brief description of what this project type entails"
+    },
+    "default_capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+      },
+      "uniqueItems": true,
+      "default": [],
+      "description": "Capability IDs that are typically required for this project type"
+    },
+    "recommended_capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+      },
+      "uniqueItems": true,
+      "default": [],
+      "description": "Capability IDs that are recommended but not required"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+      },
+      "uniqueItems": true,
+      "default": [],
+      "description": "Categorization tags for filtering/discovery"
+    },
+    "example_bundles": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+      },
+      "uniqueItems": true,
+      "default": [],
+      "description": "Stack bundle IDs that are commonly used with this project type"
+    }
+  },
+  "examples": [
+    {
+      "schema_version": "1.0.0",
+      "id": "saas",
+      "name": "SaaS Platform",
+      "description": "Subscription-based web application with multi-tenancy",
+      "default_capabilities": ["authentication", "authorization", "payments", "subscriptions", "email", "caching"],
+      "recommended_capabilities": ["analytics", "notifications", "file-upload", "search"],
+      "tags": ["web", "subscription", "b2b"],
+      "example_bundles": ["nextjs-supabase", "nextjs-dotnet-postgres"]
+    }
+  ]
+}

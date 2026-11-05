@@ -1,0 +1,158 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-coding-starter.dev/schemas/compatibility.json",
+  "title": "Compatibility",
+  "description": "Compatibility rules between technologies, capabilities, and stack bundles — deterministic and machine-readable",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "rules"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Schema version for this contract"
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "subject", "target", "severity"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "technology-technology",
+              "technology-capability",
+              "capability-capability",
+              "bundle-bundle",
+              "bundle-capability",
+              "bundle-technology",
+              "technology-project-type"
+            ],
+            "description": "Type of compatibility rule"
+          },
+          "subject": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+            "description": "Subject entity ID (technology, capability, or bundle)"
+          },
+          "target": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+            "description": "Target entity ID (technology, capability, or bundle)"
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["error", "warning", "info"],
+            "description": "Severity level: error = hard constraint, warning = soft constraint, info = informational"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "Human-readable explanation of the rule"
+          },
+          "condition": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "when": {
+                "type": "string",
+                "description": "Optional condition expression (future extensibility)"
+              },
+              "context": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Context where this rule applies (e.g., specific project types)"
+              }
+            },
+            "description": "Optional conditional applicability"
+          }
+        }
+      },
+      "description": "Array of compatibility rules"
+    }
+  },
+  "examples": [
+    {
+      "schema_version": "1.0.0",
+      "rules": [
+        {
+          "type": "technology-technology",
+          "subject": "nextjs",
+          "target": "aspnet-core",
+          "severity": "error",
+          "reason": "Cannot have two primary frontend frameworks in one bundle",
+          "condition": {
+            "context": ["frontend"]
+          }
+        },
+        {
+          "type": "technology-technology",
+          "subject": "postgresql",
+          "target": "mysql",
+          "severity": "error",
+          "reason": "Cannot have two primary relational databases in one bundle",
+          "condition": {
+            "context": ["database"]
+          }
+        },
+        {
+          "type": "technology-capability",
+          "subject": "nextjs",
+          "target": "realtime",
+          "severity": "warning",
+          "reason": "Next.js realtime requires additional setup (Supabase, Pusher, or custom WebSocket server)",
+          "condition": {}
+        },
+        {
+          "type": "capability-capability",
+          "subject": "authentication",
+          "target": "authorization",
+          "severity": "info",
+          "reason": "Authentication typically implies authorization needs",
+          "condition": {}
+        },
+        {
+          "type": "bundle-bundle",
+          "subject": "nextjs-supabase",
+          "target": "nextjs-dotnet-postgres",
+          "severity": "error",
+          "reason": "Both bundles provide full-stack Next.js solutions with different backends",
+          "condition": {}
+        },
+        {
+          "type": "technology-project-type",
+          "subject": "react-native",
+          "target": "mobile-app",
+          "severity": "info",
+          "reason": "React Native is a primary choice for mobile-app project type",
+          "condition": {}
+        },
+        {
+          "type": "technology-technology",
+          "subject": "supabase-auth",
+          "target": "nextauth",
+          "severity": "error",
+          "reason": "Cannot use two authentication providers simultaneously",
+          "condition": {
+            "context": ["auth"]
+          }
+        },
+        {
+          "type": "technology-technology",
+          "subject": "tailwindcss",
+          "target": "chakra-ui",
+          "severity": "warning",
+          "reason": "Using two CSS frameworks increases bundle size and complexity",
+          "condition": {
+            "context": ["styling"]
+          }
+        }
+      ]
+    }
+  ]
+}

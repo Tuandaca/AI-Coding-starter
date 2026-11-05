@@ -1,0 +1,256 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-coding-starter.dev/schemas/runtime-adapter.json",
+  "title": "RuntimeAdapter",
+  "description": "Metadata contract for AI coding runtimes — runtime detection != permission to modify global configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "schema_version"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Schema version for this contract"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+      "minLength": 2,
+      "maxLength": 64,
+      "description": "Stable, lowercase kebab-case identifier (e.g., 'codex', 'opencode', 'antigravity')"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Human-readable display name"
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 512,
+      "description": "Description of this runtime"
+    },
+    "instruction_format": {
+      "type": "string",
+      "enum": ["agents-md", "claude-md", "codex-md", "gemini-md", "cursor-md", "custom"],
+      "description": "Primary instruction file format this runtime expects"
+    },
+    "agent_format": {
+      "type": "string",
+      "enum": ["markdown-frontmatter", "yaml", "json", "custom"],
+      "description": "Format for agent definitions"
+    },
+    "skill_format": {
+      "type": "string",
+      "enum": ["markdown", "yaml", "json", "custom"],
+      "description": "Format for skill definitions"
+    },
+    "project_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Project-local paths where this runtime reads configuration (e.g., ['.codex/', '.opencode/'])"
+    },
+    "global_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Global/user-level paths (READ ONLY — starter never writes here without explicit policy)"
+    },
+    "supports_mcp": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this runtime supports Model Context Protocol"
+    },
+    "supports_hooks": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this runtime supports hook scripts"
+    },
+    "supports_subagents": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this runtime supports sub-agent delegation"
+    },
+    "supports_commands": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this runtime supports custom slash commands"
+    },
+    "detection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "executables": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Executable names that indicate this runtime is installed (presence alone does NOT imply intent to modify global config)"
+        },
+        "config_files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Config file patterns that indicate this runtime is configured"
+        },
+        "environment_variables": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Environment variables that indicate this runtime"
+        }
+      },
+      "description": "Detection heuristics — executable presence != permission to modify global configuration"
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Known limitations of this runtime adapter"
+    },
+    "permission_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "modifies_global_config": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether adapter ever modifies global config (must be false unless explicit user consent)"
+        },
+        "requires_explicit_consent": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether explicit user consent is required for any global changes"
+        },
+        "dangerous_flags_never_enabled": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "--dangerously-skip-permissions",
+            "--dangerously-bypass-approvals-and-sandbox",
+            "--yolo"
+          ],
+          "description": "Flags that must NEVER be silently enabled"
+        }
+      },
+      "description": "Security/permission policy for this runtime adapter"
+    }
+  },
+  "examples": [
+    {
+      "schema_version": "1.0.0",
+      "id": "codex",
+      "name": "Codex",
+      "description": "OpenAI's Codex CLI agent",
+      "instruction_format": "agents-md",
+      "agent_format": "markdown-frontmatter",
+      "skill_format": "markdown",
+      "project_paths": [".codex/"],
+      "global_paths": ["~/.codex/"],
+      "supports_mcp": true,
+      "supports_hooks": false,
+      "supports_subagents": true,
+      "supports_commands": true,
+      "detection": {
+        "executables": ["codex"],
+        "config_files": [".codex/config.yaml", ".codex/agents/*.md"],
+        "environment_variables": ["CODEX_HOME"]
+      },
+      "limitations": ["Agent format requires frontmatter", "No native workflow/command system"],
+      "permission_policy": {
+        "modifies_global_config": false,
+        "requires_explicit_consent": true,
+        "dangerous_flags_never_enabled": ["--dangerously-skip-permissions", "--yolo"]
+      }
+    },
+    {
+      "schema_version": "1.0.0",
+      "id": "opencode",
+      "name": "OpenCode",
+      "description": "OpenCode AI coding agent",
+      "instruction_format": "agents-md",
+      "agent_format": "markdown-frontmatter",
+      "skill_format": "markdown",
+      "project_paths": [".opencode/"],
+      "global_paths": ["~/.config/opencode/"],
+      "supports_mcp": true,
+      "supports_hooks": true,
+      "supports_subagents": true,
+      "supports_commands": true,
+      "detection": {
+        "executables": ["opencode"],
+        "config_files": [".opencode/config.json", ".opencode/agent/*.md"],
+        "environment_variables": ["OPENCODE_CONFIG_DIR"]
+      },
+      "limitations": ["Hook system is runtime-specific"],
+      "permission_policy": {
+        "modifies_global_config": false,
+        "requires_explicit_consent": true,
+        "dangerous_flags_never_enabled": ["--dangerously-skip-permissions", "--yolo"]
+      }
+    },
+    {
+      "schema_version": "1.0.0",
+      "id": "antigravity",
+      "name": "Antigravity IDE",
+      "description": "Antigravity IDE with Gemini integration",
+      "instruction_format": "gemini-md",
+      "agent_format": "markdown-frontmatter",
+      "skill_format": "markdown",
+      "project_paths": [".agent/"],
+      "global_paths": [],
+      "supports_mcp": false,
+      "supports_hooks": false,
+      "supports_subagents": false,
+      "supports_commands": true,
+      "detection": {
+        "executables": [],
+        "config_files": [".agent/GEMINI.md", ".agent/agents/*.md", ".agent/skills/*/skill.md"],
+        "environment_variables": []
+      },
+      "limitations": ["No MCP support", "Gemini-centric instruction format", "No subagent delegation"],
+      "permission_policy": {
+        "modifies_global_config": false,
+        "requires_explicit_consent": true,
+        "dangerous_flags_never_enabled": ["--dangerously-skip-permissions", "--yolo"]
+      }
+    },
+    {
+      "schema_version": "1.0.0",
+      "id": "claude-code",
+      "name": "Claude Code",
+      "description": "Anthropic's Claude Code CLI",
+      "instruction_format": "claude-md",
+      "agent_format": "markdown-frontmatter",
+      "skill_format": "markdown",
+      "project_paths": [".claude/"],
+      "global_paths": ["~/.claude/"],
+      "supports_mcp": true,
+      "supports_hooks": true,
+      "supports_subagents": true,
+      "supports_commands": true,
+      "detection": {
+        "executables": ["claude"],
+        "config_files": [".claude/CLAUDE.md", ".claude/agents/*.md", ".claude/settings.json"],
+        "environment_variables": ["CLAUDE_CONFIG_DIR"]
+      },
+      "limitations": ["Custom settings.json schema"],
+      "permission_policy": {
+        "modifies_global_config": false,
+        "requires_explicit_consent": true,
+        "dangerous_flags_never_enabled": ["--dangerously-skip-permissions", "--yolo"]
+      }
+    }
+  ]
+}

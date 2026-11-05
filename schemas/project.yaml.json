@@ -1,0 +1,145 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-coding-starter.dev/schemas/portable-project-state.json",
+  "title": "PortableProjectState",
+  "description": "Canonical portable project specification — authoritative state owned by the project, not the runtime",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "project"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Schema version for the portable project specification"
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "created_at", "updated_at"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+          "minLength": 2,
+          "maxLength": 64,
+          "description": "Stable project identifier"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Human-readable project name"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1024,
+          "default": "",
+          "description": "Project description"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 creation timestamp"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 last modification timestamp"
+        },
+        "project_type": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+          "description": "Project type ID (from project-type catalog)"
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+          },
+          "uniqueItems": true,
+          "default": [],
+          "description": "Selected capability IDs"
+        },
+        "stack_bundle": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+          "description": "Selected stack bundle ID (from stack-bundle catalog)"
+        },
+        "technology_overrides": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+          },
+          "default": {},
+          "description": "Explicit technology overrides keyed by role (e.g., {'database': 'mysql'})"
+        },
+        "runtime_preferences": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "primary": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+              "description": "Primary runtime adapter ID"
+            },
+            "fallbacks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+              },
+              "description": "Fallback runtime adapter IDs in order"
+            },
+            "project_local_only": {
+              "type": "boolean",
+              "default": true,
+              "description": "Whether adapters should install project-local only"
+            }
+          },
+          "description": "Runtime adapter preferences"
+        },
+        "provider_preferences": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+          },
+          "default": {},
+          "description": "Explicit capability provider preferences keyed by capability ID"
+        }
+      },
+      "description": "Project identity and configuration — MACHINE AUTHORITATIVE"
+    }
+  },
+  "examples": [
+    {
+      "schema_version": "1.0.0",
+      "project": {
+        "id": "my-saas-app",
+        "name": "My SaaS Application",
+        "description": "A subscription-based B2B SaaS platform",
+        "created_at": "2026-01-15T10:30:00Z",
+        "updated_at": "2026-01-20T14:45:00Z",
+        "project_type": "saas",
+        "capabilities": ["authentication", "authorization", "payments", "subscriptions", "email", "caching", "analytics"],
+        "stack_bundle": "nextjs-supabase",
+        "technology_overrides": {
+          "database": "postgresql",
+          "styling": "tailwindcss"
+        },
+        "runtime_preferences": {
+          "primary": "codex",
+          "fallbacks": ["opencode", "claude-code"],
+          "project_local_only": true
+        },
+        "provider_preferences": {
+          "code-intelligence": "codebase-memory",
+          "research-web": "agent-reach",
+          "orchestration": "orca"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,163 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-coding-starter.dev/schemas/technology.json",
+  "title": "Technology",
+  "description": "Stable technology identity — version labels are tracked separately in version_policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "category", "ecosystem", "schema_version"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Schema version for this contract"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+      "minLength": 2,
+      "maxLength": 64,
+      "description": "Stable, lowercase kebab-case identifier without version numbers (e.g., 'nextjs', 'postgresql', 'aspnet-core')"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Human-readable display name (e.g., 'Next.js', 'PostgreSQL', 'ASP.NET Core')"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "frontend",
+        "backend",
+        "database",
+        "orm",
+        "cache",
+        "queue",
+        "search",
+        "auth",
+        "payments",
+        "ai",
+        "vector-database",
+        "hosting",
+        "styling",
+        "testing",
+        "language",
+        "framework",
+        "tooling"
+      ],
+      "description": "Technology category for grouping and compatibility rules"
+    },
+    "ecosystem": {
+      "type": "string",
+      "enum": [
+        "javascript",
+        "typescript",
+        "python",
+        "dotnet",
+        "go",
+        "rust",
+        "java",
+        "php",
+        "ruby",
+        "elixir",
+        "cloud",
+        "platform-agnostic"
+      ],
+      "description": "Primary language/runtime ecosystem"
+    },
+    "version_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy"],
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "enum": ["latest-stable", "lts", "pinned-major", "pinned-exact", "rolling"],
+          "description": "How versions should be selected for this technology"
+        },
+        "default_version": {
+          "type": "string",
+          "pattern": "^\\d+(\\.\\d+)*(-[a-zA-Z0-9.-]+)?$",
+          "description": "Default version when strategy requires a specific version (e.g., '14', '18.20', '8.0')"
+        },
+        "supported_versions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^\\d+(\\.\\d+)*(-[a-zA-Z0-9.-]+)?$"
+          },
+          "description": "Explicitly supported version list (optional)"
+        },
+        "min_version": {
+          "type": "string",
+          "pattern": "^\\d+(\\.\\d+)*(-[a-zA-Z0-9.-]+)?$",
+          "description": "Minimum required version"
+        }
+      },
+      "description": "Version selection policy for this technology"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+      },
+      "uniqueItems": true,
+      "default": [],
+      "description": "Additional categorization tags"
+    },
+    "documentation_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Link to official documentation"
+    }
+  },
+  "examples": [
+    {
+      "schema_version": "1.0.0",
+      "id": "nextjs",
+      "name": "Next.js",
+      "category": "frontend",
+      "ecosystem": "typescript",
+      "version_policy": {
+        "strategy": "latest-stable",
+        "default_version": "14",
+        "supported_versions": ["13", "14", "15"],
+        "min_version": "13"
+      },
+      "tags": ["react", "ssr", "fullstack", "vercel"],
+      "documentation_url": "https://nextjs.org/docs"
+    },
+    {
+      "schema_version": "1.0.0",
+      "id": "postgresql",
+      "name": "PostgreSQL",
+      "category": "database",
+      "ecosystem": "platform-agnostic",
+      "version_policy": {
+        "strategy": "lts",
+        "default_version": "16",
+        "supported_versions": ["14", "15", "16", "17"],
+        "min_version": "14"
+      },
+      "tags": ["relational", "sql", "acid", "extensions"],
+      "documentation_url": "https://www.postgresql.org/docs/"
+    },
+    {
+      "schema_version": "1.0.0",
+      "id": "aspnet-core",
+      "name": "ASP.NET Core",
+      "category": "backend",
+      "ecosystem": "dotnet",
+      "version_policy": {
+        "strategy": "lts",
+        "default_version": "8.0",
+        "supported_versions": ["6.0", "7.0", "8.0", "9.0"],
+        "min_version": "6.0"
+      },
+      "tags": ["web-api", "minimal-api", "cross-platform"],
+      "documentation_url": "https://learn.microsoft.com/aspnet/core"
+    }
+  ]
+}
