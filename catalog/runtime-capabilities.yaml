@@ -1,0 +1,217 @@
+{
+  "schema_version": "1.0.0",
+  "runtimes": [
+    {
+      "id": "codex",
+      "name": "Codex CLI",
+      "description": "OpenAI Codex CLI runtime. Project instructions are discovered from a root-level AGENTS.md walked from the project root; project configuration is .codex/config.toml (requirements.toml for hooks). MCP, subagents, slash commands, and lifecycle hooks are supported.",
+      "instruction_format": "agents-md",
+      "agent_format": "markdown-frontmatter",
+      "skill_format": "markdown",
+      "project_paths": [
+        ".codex/"
+      ],
+      "global_paths": [
+        "~/.codex/"
+      ],
+      "supports_mcp": true,
+      "supports_hooks": true,
+      "supports_subagents": true,
+      "supports_commands": true,
+      "detection": {
+        "executables": [
+          "codex"
+        ],
+        "config_files": [
+          ".codex/config.toml",
+          ".codex/AGENTS.md"
+        ],
+        "environment_variables": [
+          "CODEX_HOME"
+        ]
+      },
+      "limitations": [
+        "Project instructions are read from the shared root AGENTS.md; Codex does not use .codex/AGENTS.md as the primary repository instruction path",
+        "Subagents scoped to a single session"
+      ],
+      "permission_policy": {
+        "modifies_global_config": false,
+        "requires_explicit_consent": true,
+        "dangerous_flags_never_enabled": [
+          "--dangerously-skip-permissions",
+          "--dangerously-bypass-approvals-and-sandbox",
+          "--yolo"
+        ]
+      }
+    },
+    {
+      "id": "opencode",
+      "name": "OpenCode",
+      "description": "OpenCode (current, maintained as Charmbracelet Crush) runtime. Project instructions use a root-level AGENTS.md; project configuration uses .opencode/opencode.json or .opencode/opencode.jsonc. MCP, hooks (via plugins), subagents (agent tool), and custom commands are supported. The archived opencode-ai/opencode repository is historical only.",
+      "instruction_format": "agents-md",
+      "agent_format": "markdown-frontmatter",
+      "skill_format": "markdown",
+      "project_paths": [
+        ".opencode/"
+      ],
+      "global_paths": [
+        "~/.opencode.json",
+        "~/.config/opencode/"
+      ],
+      "supports_mcp": true,
+      "supports_hooks": true,
+      "supports_subagents": true,
+      "supports_commands": true,
+      "detection": {
+        "executables": [
+          "opencode"
+        ],
+        "config_files": [
+          ".opencode/opencode.json",
+          ".opencode/opencode.jsonc",
+          ".opencode/commands/*.md"
+        ],
+        "environment_variables": []
+      },
+      "limitations": [
+        "Project instructions are read from the shared root AGENTS.md; OpenCode does not require a separate OpenCode.md memory file",
+        "Hook support is via plugins and is preliminary"
+      ],
+      "permission_policy": {
+        "modifies_global_config": false,
+        "requires_explicit_consent": true,
+        "dangerous_flags_never_enabled": [
+          "--dangerously-skip-permissions",
+          "--dangerously-bypass-approvals-and-sandbox",
+          "--yolo"
+        ]
+      }
+    },
+    {
+      "id": "antigravity",
+      "name": "Antigravity IDE",
+      "description": "Project-native Antigravity runtime using .agent/ directory and GEMINI.md instructions with support for project commands. No MCP, no hooks, no subagent delegation.",
+      "instruction_format": "gemini-md",
+      "agent_format": "markdown-frontmatter",
+      "skill_format": "markdown",
+      "project_paths": [
+        ".agent/"
+      ],
+      "global_paths": [],
+      "supports_mcp": false,
+      "supports_hooks": false,
+      "supports_subagents": false,
+      "supports_commands": true,
+      "detection": {
+        "executables": [],
+        "config_files": [
+          ".agent/GEMINI.md",
+          ".agent/agents/*.md",
+          ".agent/skills/*/skill.md"
+        ],
+        "environment_variables": []
+      },
+      "limitations": [
+        "No MCP support",
+        "Gemini-centric instruction format",
+        "No subagent delegation"
+      ],
+      "permission_policy": {
+        "modifies_global_config": false,
+        "requires_explicit_consent": true,
+        "dangerous_flags_never_enabled": [
+          "--dangerously-skip-permissions",
+          "--dangerously-bypass-approvals-and-sandbox",
+          "--yolo"
+        ]
+      }
+    },
+    {
+      "id": "claude-code",
+      "name": "Claude Code",
+      "description": "Anthropic Claude Code runtime. Project instructions are read from a root-level CLAUDE.md or, in its place, the shared root AGENTS.md. .claude/ holds project settings (settings.json), hooks, and agents. MCP, hooks, subagents, and slash commands are supported.",
+      "instruction_format": "agents-md",
+      "agent_format": "markdown-frontmatter",
+      "skill_format": "markdown",
+      "project_paths": [
+        ".claude/"
+      ],
+      "global_paths": [
+        "~/.claude/"
+      ],
+      "supports_mcp": true,
+      "supports_hooks": true,
+      "supports_subagents": true,
+      "supports_commands": true,
+      "detection": {
+        "executables": [
+          "claude"
+        ],
+        "config_files": [
+          "CLAUDE.md",
+          ".claude/CLAUDE.md",
+          ".claude/settings.json"
+        ],
+        "environment_variables": [
+          "CLAUDE_CONFIG_DIR",
+          "ANTHROPIC_API_KEY"
+        ]
+      },
+      "limitations": [
+        "Project instructions are read from the shared root AGENTS.md or a root CLAUDE.md; .claude/CLAUDE.md is not the primary discovery location",
+        "Custom settings.json schema"
+      ],
+      "permission_policy": {
+        "modifies_global_config": false,
+        "requires_explicit_consent": true,
+        "dangerous_flags_never_enabled": [
+          "--dangerously-skip-permissions",
+          "--dangerously-bypass-approvals-and-sandbox",
+          "--yolo"
+        ]
+      }
+    },
+    {
+      "id": "cursor",
+      "name": "Cursor",
+      "description": "Cursor desktop IDE runtime. Project instructions use a root-level AGENTS.md (also supported by Cursor) plus .cursor/rules/ MDC rule files. MCP is supported. Hooks, subagents, and slash commands are not documented for Cursor.",
+      "instruction_format": "agents-md",
+      "agent_format": "markdown-frontmatter",
+      "skill_format": "markdown",
+      "project_paths": [
+        ".cursor/"
+      ],
+      "global_paths": [
+        "~/.cursor/"
+      ],
+      "supports_mcp": true,
+      "supports_hooks": false,
+      "supports_subagents": false,
+      "supports_commands": false,
+      "detection": {
+        "executables": [],
+        "config_files": [
+          ".cursor/",
+          ".cursor/rules/*.mdc",
+          "AGENTS.md"
+        ],
+        "environment_variables": []
+      },
+      "limitations": [
+        "GUI desktop IDE; CLI support limited",
+        "MDC frontmatter required for .cursor/rules",
+        "Subagent and hook support not documented",
+        "Project instructions are read from the shared root AGENTS.md"
+      ],
+      "permission_policy": {
+        "modifies_global_config": false,
+        "requires_explicit_consent": true,
+        "dangerous_flags_never_enabled": [
+          "--dangerously-skip-permissions",
+          "--dangerously-bypass-approvals-and-sandbox",
+          "--yolo"
+        ]
+      }
+    }
+  ]
+}

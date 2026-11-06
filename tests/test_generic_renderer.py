@@ -1,0 +1,251 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""M5: Generic renderer tests (corrected shared-ownership model).
+
+Covers requirement 45 (TEST PLAN — RENDERING):
+  - canonical fixture + adapter -> expected project-local output
+  - correct path
+  - correct format (canonical state placeholders resolved)
+  - deterministic content
+  - no global path writes
+  - reads M4 canonical state (project.yaml / state.yaml / resources.lock)
+  - shared M4 AGENTS.md is consumed, never owned or deleted by adapters
+
+Standard library only. No network.
+"""
+import importlib
+import json
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+generic_renderer = importlib.import_module("core.generic-renderer")  # noqa: E402
+GenericRenderer = generic_renderer.GenericRenderer
+
+from core.spec import build_project_spec, write_project_spec  # noqa: E402
+from core.state import (  # noqa: E402
+    build_initial_state,
+    build_resources_lock,
+    write_resources_lock,
+    write_state,
+)
+
+ADAPTERS_DIR = REPO_ROOT / "runtime-adapters"
+SHARED_CONSUMERS = ["codex", "opencode", "claude-code", "cursor"]
+OWNED_ADAPTER = "antigravity"
+ALL_RUNTIME_IDS = SHARED_CONSUMERS + [OWNED_ADAPTER]
+
+EXPECTED_OWNED_OUTPUT = {
+    "antigravity": ".agent/GEMINI.md",
+}
+
+
+def make_canonical_project(root, project_name="My Project",
+                           project_type="saas", stack_bundle="nextjs-supabase",
+                           capabilities=None, phase="planning", focus="design"):
+    """Build a minimal M4 canonical project under ``root`` plus a shared
+    root AGENTS.md (as M4 portable_renderer would derive)."""
+    root = Path(root)
+    spec = build_project_spec(
+        project_name, project_type_id=project_type,
+        capabilities=capabilities or ["authentication", "payments"],
+        stack_bundle_id=stack_bundle,
+    )
+    write_project_spec(root, spec)
+    state = build_initial_state(str(spec.id), phase=phase, focus=focus)
+    write_state(root, state)
+    lock = build_resources_lock(stack_bundle, requested_bundle_id=stack_bundle)
+    write_resources_lock(root, lock)
+    # M4 derives a shared root AGENTS.md that runtimes may consume.
+    (root / "AGENTS.md").write_text(
+        f"# {project_name}\n\nDerived M4 project instructions.\n",
+        encoding="utf-8",
+    )
+    return root, spec, state, lock
+
+
+class TestGenericRendererRendering(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = Path(tempfile.mkdtemp(prefix="m5-renderer-"))
+        self.root, self.spec, self.state, self.lock = make_canonical_project(
+            self.temp_dir
+        )
+        self.renderer = GenericRenderer(self.root, adapters_dir=str(ADAPTERS_DIR))
+
+    def test_shared_consumers_install_ok_with_no_owned_file(self):
+        """codex/opencode/claude-code/cursor consume shared AGENTS.md;
+        they generate no owned instruction file."""
+        for runtime_id in SHARED_CONSUMERS:
+            with self.subTest(runtime=runtime_id):
+                result = self.renderer.install(runtime_id)
+                self.assertTrue(result.ok, msg=f"{runtime_id}: {result.errors}")
+                self.assertEqual(result.written, [])
+                # No owned instruction file created for a shared consumer.
+                self.assertEqual(
+                    len(list(self.root.glob(".agent/**/*"))) +
+                    len(list(self.root.glob(".codex/**/*"))) +
+                    len(list(self.root.glob(".claude/**/*"))) +
+                    len(list(self.root.glob(".cursor/**/*"))),
+                    0,
+                )
+                # Canonical files untouched.
+                self.assertTrue(
+                    (self.root / ".ai-coding-starter" / "project.yaml").exists()
+                )
+
+    def test_antigravity_renders_owned_output_with_canonical_state(self):
+        result = self.renderer.install("antigravity")
+        self.assertTrue(result.ok, msg=result.errors)
+        owned = self.root / ".agent/GEMINI.md"
+        self.assertTrue(owned.exists())
+        self.assertIn(owned, result.written)
+        content = owned.read_text(encoding="utf-8")
+        self.assertIn("My Project", content)
+        self.assertIn(str(self.spec.id), content)
+        self.assertIn("saas", content)
+        self.assertIn("nextjs-supabase", content)
+        self.assertIn("authentication, payments", content)
+        self.assertIn("planning", content)
+        self.assertIn("design", content)
+        self.assertIn(
+            "<!-- ai-coding-starter runtime adapter: antigravity | generated | owned -->",
+            content,
+        )
+
+    def test_rendering_is_deterministic(self):
+        contents = {}
+        for runtime_id in ALL_RUNTIME_IDS:
+            result = self.renderer.install(runtime_id)
+            self.assertTrue(result.ok, msg=f"{runtime_id}: {result.errors}")
+            if runtime_id == OWNED_ADAPTER:
+                contents[runtime_id] = (
+                    self.root / EXPECTED_OWNED_OUTPUT[runtime_id]
+                ).read_text(encoding="utf-8")
+        for runtime_id in [OWNED_ADAPTER]:
+            self.renderer.install(runtime_id)
+            again = (
+                self.root / EXPECTED_OWNED_OUTPUT[runtime_id]
+            ).read_text(encoding="utf-8")
+            self.assertEqual(again, contents[runtime_id])
+
+    def test_no_global_path_writes(self):
+        for runtime_id in ALL_RUNTIME_IDS:
+            result = self.renderer.install(runtime_id)
+            self.assertTrue(result.ok)
+            for written in result.written:
+                self.assertIn(
+                    self.temp_dir.resolve(),
+                    written.resolve().parents,
+                )
+
+    def test_manifest_only_for_owned_adapter(self):
+        self.renderer.install("antigravity")
+        manifest_path = self.root / ".ai-coding-starter" / ".runtime-manifest.json"
+        self.assertTrue(manifest_path.exists())
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertIn("antigravity", manifest["runtimes"])
+        self.assertIn(".agent/GEMINI.md",
+                      manifest["runtimes"]["antigravity"]["outputs"])
+        for runtime_id in SHARED_CONSUMERS:
+            self.assertNotIn(runtime_id, manifest["runtimes"])
+
+    def test_unknown_adapter_fail_open(self):
+        result = self.renderer.install("does-not-exist")
+        self.assertFalse(result.ok)
+        self.assertTrue(result.errors)
+        self.assertTrue((self.root / ".ai-coding-starter" / "project.yaml").exists())
+
+    def test_canonical_files_not_written(self):
+        before = {
+            name: (self.root / ".ai-coding-starter" / name).read_text(encoding="utf-8")
+            for name in ("project.yaml", "state.yaml", "resources.lock")
+        }
+        for runtime_id in ALL_RUNTIME_IDS:
+            self.renderer.install(runtime_id)
+        after = {
+            name: (self.root / ".ai-coding-starter" / name).read_text(encoding="utf-8")
+            for name in ("project.yaml", "state.yaml", "resources.lock")
+        }
+        self.assertEqual(before, after)
+
+
+class TestGenericRendererSharedAgentsMd(unittest.TestCase):
+    """Shared M4 root AGENTS.md must be consumed, never owned or deleted."""
+
+    def setUp(self):
+        self.temp_dir = Path(tempfile.mkdtemp(prefix="m5-shared-"))
+        self.root, _, _, _ = make_canonical_project(self.temp_dir)
+        self.renderer = GenericRenderer(self.root, adapters_dir=str(ADAPTERS_DIR))
+        self.agents_md = self.root / "AGENTS.md"
+        self.before = self.agents_md.read_text(encoding="utf-8")
+
+    def test_shared_agents_md_preserved_across_install_uninstall(self):
+        for runtime_id in SHARED_CONSUMERS:
+            with self.subTest(runtime=runtime_id):
+                install_result = self.renderer.install(runtime_id)
+                self.assertTrue(install_result.ok, msg=install_result.errors)
+                self.assertTrue(self.agents_md.exists())
+                self.assertEqual(
+                    self.agents_md.read_text(encoding="utf-8"), self.before
+                )
+                uninstall_result = self.renderer.uninstall(runtime_id)
+                self.assertTrue(uninstall_result.ok, msg=uninstall_result.errors)
+                self.assertTrue(self.agents_md.exists())
+                self.assertEqual(
+                    self.agents_md.read_text(encoding="utf-8"), self.before
+                )
+
+    def test_no_adapter_claims_ownership_of_agents_md(self):
+        for runtime_id in ALL_RUNTIME_IDS:
+            adapter_path = ADAPTERS_DIR / f"{runtime_id}.yaml"
+            import json as _json
+            adapter = _json.loads(adapter_path.read_text(encoding="utf-8"))
+            source = adapter.get("instruction_source", {})
+            if runtime_id == OWNED_ADAPTER:
+                self.assertEqual(source.get("ownership"), "owned")
+                self.assertEqual(source.get("path"), ".agent/GEMINI.md")
+            else:
+                self.assertEqual(source.get("ownership"), "shared")
+                self.assertEqual(source.get("path"), "AGENTS.md")
+
+
+class TestGenericRendererLoadAndValidate(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = Path(tempfile.mkdtemp(prefix="m5-load-"))
+        self.renderer = GenericRenderer(self.temp_dir, adapters_dir=str(ADAPTERS_DIR))
+
+    def test_load_adapter_returns_dict(self):
+        adapter = self.renderer.load_adapter("codex")
+        self.assertIsInstance(adapter, dict)
+        self.assertEqual(adapter.get("id"), "codex")
+
+    def test_load_adapter_missing_returns_none_fail_open(self):
+        self.assertIsNone(self.renderer.load_adapter("not-a-real-runtime"))
+
+    def test_validate_adapter_accepts_valid_adapter(self):
+        adapter = self.renderer.load_adapter("codex")
+        result = self.renderer.validate_adapter(adapter)
+        self.assertTrue(result.is_valid)
+
+    def test_validate_adapter_accepts_empty_outputs(self):
+        """Shared-consumer adapters declare no render.outputs; that is valid."""
+        adapter = self.renderer.load_adapter("opencode")
+        result = self.renderer.validate_adapter(adapter)
+        self.assertTrue(result.is_valid)
+
+    def test_validate_adapter_rejects_global_config_writer(self):
+        adapter = self.renderer.load_adapter("codex")
+        adapter = dict(adapter)
+        adapter["permission_policy"] = dict(adapter["permission_policy"])
+        adapter["permission_policy"]["modifies_global_config"] = True
+        result = self.renderer.validate_adapter(adapter)
+        self.assertFalse(result.is_valid)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

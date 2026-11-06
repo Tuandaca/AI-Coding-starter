@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0.0",
+  "id": "codex",
+  "runtime_id": "codex",
+  "name": "Codex CLI",
+  "description": "Codex consumes the shared root AGENTS.md (M4-derived) for repository instructions; .codex/config.toml is project-local Codex configuration and is not written by M5.",
+  "instruction_format": "agents-md",
+  "instruction_source": {
+    "path": "AGENTS.md",
+    "ownership": "shared"
+  },
+  "config": [
+    ".codex/config.toml"
+  ],
+  "render": {
+    "outputs": []
+  },
+  "install": {
+    "paths": []
+  },
+  "uninstall": {
+    "owned_files": [],
+    "owned_dirs": []
+  },
+  "permission_policy": {
+    "modifies_global_config": false,
+    "requires_explicit_consent": true,
+    "dangerous_flags_never_enabled": [
+      "--dangerously-skip-permissions",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "--yolo"
+    ]
+  },
+  "limitations": [
+    "Project instructions are read from the shared root AGENTS.md; Codex does not use .codex/AGENTS.md as the primary repository instruction path",
+    "Subagents scoped to a single session"
+  ],
+  "detection": {
+    "executables": [
+      "codex"
+    ],
+    "config_files": [
+      ".codex/config.toml",
+      "AGENTS.md"
+    ],
+    "environment_variables": [
+      "CODEX_HOME"
+    ]
+  }
+}
