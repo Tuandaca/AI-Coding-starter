@@ -453,16 +453,56 @@ def build_resources_lock(
     *,
     requested_bundle_id: Optional[str] = None,
     catalog_version: Optional[str] = None,
+    resources: Optional[list[dict]] = None,
 ) -> ResourcesLock:
-    """Build the minimal honest M4 resources lock.
+    """Build the M4/M7 resources lock.
 
-    ``resources`` is empty (no fabricated provenance). ``stack_bundle_resolution``
-    records the selected bundle. Technology versions are intentionally omitted
-    because M4 does not track resolved versions.
+    ``resources`` is empty by default (no fabricated provenance). When a list of
+    selected resource entries is supplied (M7), each entry is converted into a
+    :class:`LockedResource` with full provenance. Technology versions are
+    intentionally omitted unless actually resolved by the generator
+    (honest absence over false precision — see M7 Section 30).
+
+    Each resource entry dict may carry:
+      id, type, version, provenance (source, commit_sha, license, ...),
+      runtime_representations, selection_reason.
     """
+    lock_resources: list[LockedResource] = []
+    if resources:
+        for entry in resources:
+            prov = entry.get("provenance", {}) or {}
+            commit_sha = prov.get("commit_sha")
+            if not commit_sha:
+                raise ValueError(
+                    "Missing provenance commit_sha for resource "
+                    f"'{entry.get('id', '<unknown>')}' (type "
+                    f"'{entry.get('type', '<unknown>')}'). "
+                    "Every locked resource must declare a verified commit_sha; "
+                    "refusing to fabricate provenance."
+                )
+            lock_resources.append(
+                LockedResource(
+                    id=entry["id"],
+                    type=entry["type"],
+                    version=entry.get("version", "1.0.0"),
+                    provenance=Provenance(
+                        source=prov.get("source", "bundled"),
+                        commit_sha=commit_sha,
+                        upstream_repo=prov.get("upstream_repo"),
+                        license=prov.get("license"),
+                        imported_date=prov.get("imported_date"),
+                        reviewed_date=prov.get("reviewed_date"),
+                        transformation=prov.get("transformation"),
+                    ),
+                    runtime_representations=entry.get(
+                        "runtime_representations", {}
+                    ),
+                    selection_reason=entry.get("selection_reason"),
+                )
+            )
     return ResourcesLock(
         catalog_version=catalog_version,
-        resources=[],
+        resources=lock_resources,
         stack_bundle_resolution=StackBundleResolution(
             requested_bundle=requested_bundle_id or resolved_bundle_id,
             resolved_bundle=resolved_bundle_id,

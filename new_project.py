@@ -1060,6 +1060,75 @@ def merge_requirements(selected_types):
 
     return merged
 
+
+# M7: Bundled resource provenance (from catalog/upstream-sources.yaml,
+# source "ai-coding-starter-bundled"). All bundled resources are
+# locally-authored, introduced in M2 snapshot 8b61d29, covered by MIT.
+BUNDLED_PROVENANCE = {
+    "source": "bundled",
+    "commit_sha": "8b61d297dc07772a000b85fc93138c8aefd21c45",
+    "license": "MIT",
+    "reviewed_date": "2026-11-06",
+    "transformation": "none",
+}
+
+# Resource categories always copied into every generated project (not
+# driven by project-type selection), mapped to canonical resource IDs.
+ALWAYS_INCLUDED = [
+    ("config.yaml", "template", "core-config"),
+    ("lint.md", "rule", "core-rules"),
+]
+
+
+def _strip_ext(filename: str) -> str:
+    """Strip a known file extension to obtain the canonical resource id."""
+    for ext in (".md", ".py", ".yaml", ".json"):
+        if filename.endswith(ext):
+            return filename[: -len(ext)]
+    return filename
+
+
+def _build_lock_resources(
+    merged: dict, selected_types: list, bundle_id: str
+) -> list:
+    """Build lock resource entries from merged requirements.
+
+    Maps filesystem resource names (from PROJECT_TYPES / copy_selective) to
+    canonical resource IDs with bundled provenance. Always-included core and
+    rules resources are appended. Each entry carries the bundled-source
+    provenance and a selection reason.
+    """
+    entries: list = []
+    type_reason = "project-type:" + ",".join(selected_types) if selected_types else "manual"
+
+    def add(item: str, rtype: str, reason: str) -> None:
+        entries.append(
+            {
+                "id": _strip_ext(item),
+                "type": rtype,
+                "version": "1.0.0",
+                "provenance": dict(BUNDLED_PROVENANCE),
+                "selection_reason": reason,
+            }
+        )
+
+    for agent in merged.get("agents", []):
+        add(agent, "agent", type_reason)
+    for skill in merged.get("skills", []):
+        add(skill, "skill", type_reason)
+    for shared in merged.get("shared", []):
+        add(shared, "shared-module", type_reason)
+    for workflow in merged.get("workflows", []):
+        add(workflow, "workflow", type_reason)
+    for script in merged.get("scripts", []):
+        add(script, "script", type_reason)
+
+    for item, rtype, reason in ALWAYS_INCLUDED:
+        add(item, rtype, reason)
+
+    return entries
+
+
 def copy_selective(source_base, dest_base, merged_req, project_name, selected_types, tech_stack=None, env_info=None):
     """
     Copy only required files from source to destination.
@@ -1751,8 +1820,8 @@ def main():
     )
     write_state(ai_state_dir, state)
 
-    lock = build_resources_lock(bundle_id, requested_bundle_id=bundle_id)
-    write_resources_lock(ai_state_dir, lock)
+    # M7: resources.lock is built after resource selection (merged requirements)
+    # so it reflects exactly the resources copied into this project.
 
     # Derived Markdown (readable, one-way: canonical -> Markdown) at project root.
     render_all(
@@ -1797,6 +1866,16 @@ def main():
     print(f"  Workflows: {len(merged['workflows'])}")
     print(f"  Scripts: {len(merged['scripts'])}")
     print("-" * 60)
+
+    # M7: Build resources.lock from exactly the resources selected for this
+    # project (merged requirements), not the entire bundled catalog.
+    lock_resources = _build_lock_resources(merged, selected_types, bundle_id)
+    lock = build_resources_lock(
+        bundle_id,
+        requested_bundle_id=bundle_id,
+        resources=lock_resources,
+    )
+    write_resources_lock(ai_state_dir, lock)
 
     confirm = get_input("\nTạo dự án? (y/n)", "y")
     if confirm.lower() != 'y':

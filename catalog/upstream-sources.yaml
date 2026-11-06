@@ -1,0 +1,94 @@
+{
+  "schema_version": "1.0.0",
+  "catalog_version": "2026.11.06-1",
+  "reviewed_date": "2026-11-06",
+  "sources": [
+    {
+      "id": "ai-coding-starter-bundled",
+      "name": "AI-Coding-starter Bundled Resources",
+      "repository": null,
+      "commit_sha": "8b61d297dc07772a000b85fc93138c8aefd21c45",
+      "license": "MIT",
+      "classification": "bundled-local",
+      "reviewed_date": "2026-11-06",
+      "selected_resource_ids": [
+        "backend-specialist", "cloud-architect", "debugger", "frontend-specialist",
+        "game-developer", "mobile-developer", "orchestrator", "performance-optimizer",
+        "project-planner", "security-auditor", "seo-specialist", "test-engineer",
+        "ai-engineer", "api-documenter", "cloud-architect-master", "cro-expert-kit",
+        "database-migration", "deployment-engineer", "full-stack-scaffold",
+        "game-development", "mcp-builder", "mobile-design", "modern-web-architect",
+        "performance-engineer", "seo-expert-kit", "tdd-master-workflow",
+        "ai-master", "api-standards", "database-master", "design-philosophy",
+        "design-system", "infra-blueprints", "metrics", "resilience-patterns",
+        "security-armor", "seo-master", "testing-master", "ui-ux-pro-max",
+        "vitals-templates", "commit", "create", "debug", "deploy", "enhance",
+        "fix", "monitor", "preview", "progress", "security", "seo", "stats",
+        "status", "test", "auto_preview", "checklist", "verify_all",
+        "config", "lint"
+      ],
+      "import_version": "1.0.0",
+      "notes": "Locally-authored bundled resources introduced in M2 (commit 8b61d29). Not copied from any external template, upstream repository, or third-party source. Covered by the repository MIT License. End-user generation uses these offline; no upstream network access required."
+    },
+    {
+      "id": "agency-agents",
+      "name": "Agency Agents",
+      "repository": "https://github.com/msitarzewski/agency-agents",
+      "commit_sha": "b859c515d813efcfc4755d3471dd9e7686c7706d",
+      "license": "MIT",
+      "classification": "architectural-inspiration",
+      "reviewed_date": "2026-11-06",
+      "selected_resource_ids": [],
+      "import_version": null,
+      "notes": "Architectural reference for the declarative runtime adapter model (integrations/ + scripts/convert.sh). Not imported into generated projects; M6 owns specialist agent import. Verified commit via GitHub API on 2026-11-06."
+    },
+    {
+      "id": "agent-reach",
+      "name": "Agent-Reach",
+      "repository": "https://github.com/Panniantong/Agent-Reach",
+      "commit_sha": "47898829204ad27521d8a1719e3aeca3b8a3e0ca",
+      "license": "MIT",
+      "classification": "optional-external-integration",
+      "reviewed_date": "2026-11-06",
+      "selected_resource_ids": [],
+      "import_version": null,
+      "notes": "Optional research-web provider (ordered provider/fallback architectural reference). Not imported by M7; M10 owns integration. Verified commit via GitHub API on 2026-11-06."
+    },
+    {
+      "id": "orca",
+      "name": "Orca",
+      "repository": "https://github.com/orca-cli/orca",
+      "commit_sha": "5beeefcb57555962bb93facc54b5f82484731802",
+      "license": "MIT",
+      "classification": "optional-external-integration",
+      "reviewed_date": "2026-11-06",
+      "selected_resource_ids": [],
+      "import_version": null,
+      "notes": "Optional orchestration/runtime manager (parallel git worktrees). Not imported by M7; M11 owns integration. Verified commit via GitHub API on 2026-11-06."
+    },
+    {
+      "id": "codebase-memory-mcp",
+      "name": "Codebase Memory MCP",
+      "repository": "https://github.com/DeusData/codebase-memory-mcp",
+      "commit_sha": "612eee2518ef84cc573e491fdee5fa5c90264cb5",
+      "license": "MIT",
+      "classification": "optional-external-integration",
+      "reviewed_date": "2026-11-06",
+      "selected_resource_ids": [],
+      "import_version": null,
+      "notes": "Optional code intelligence provider. Not imported by M7; M9 owns integration. Verified commit via GitHub API on 2026-11-06."
+    },
+    {
+      "id": "openmontage",
+      "name": "OpenMontage",
+      "repository": "https://github.com/calesthio/OpenMontage",
+      "commit_sha": "d21f5d4eaa08422b09c7091757a05affcbabb35b",
+      "license": "AGPL-3.0",
+      "classification": "architectural-inspiration",
+      "reviewed_date": "2026-11-06",
+      "selected_resource_ids": [],
+      "import_version": null,
+      "notes": "AGPLv3. Architectural inspiration only (declarative pipeline manifests, scored provider selection, approval gates). NO source copied into this MIT project. Firewall enforced: selected_resource_ids is empty and no OpenMontage code is bundled."
+    }
+  ]
+}

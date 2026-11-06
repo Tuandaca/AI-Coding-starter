@@ -1,0 +1,98 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-coding-starter.dev/schemas/upstream-sources.json",
+  "title": "Upstream Sources Provenance Catalog",
+  "description": "Maintainer-side provenance catalog for AI-Coding-starter V2 M7. Records audited upstream sources: repository, commit SHA, license, classification, and selected resource IDs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "sources"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "catalog_version": {
+      "type": "string",
+      "description": "Deterministic catalog snapshot identifier (e.g., date-based or starter commit SHA)."
+    },
+    "reviewed_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date the catalog was last reviewed in full."
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "commit_sha", "license", "classification", "reviewed_date", "selected_resource_ids"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+            "minLength": 2,
+            "maxLength": 64,
+            "description": "Stable, lowercase kebab-case source identifier."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Human-readable source name."
+          },
+          "repository": {
+            "type": ["string", "null"],
+            "format": "uri",
+            "description": "Upstream repository URL. Null for bundled-local sources with no upstream."
+          },
+          "commit_sha": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{40}$",
+            "description": "Exact 40-character upstream commit SHA for reproducibility."
+          },
+          "license": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "License identifier (SPDX preferred)."
+          },
+          "classification": {
+            "type": "string",
+            "enum": [
+              "bundled-local",
+              "copied-resource",
+              "transformed-resource",
+              "architectural-inspiration",
+              "optional-external-integration"
+            ],
+            "description": "Source classification vocabulary."
+          },
+          "reviewed_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Date this source entry was last reviewed."
+          },
+          "selected_resource_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$"
+            },
+            "uniqueItems": true,
+            "default": [],
+            "description": "Canonical resource IDs selected/imported from this source into generated projects."
+          },
+          "import_version": {
+            "type": ["string", "null"],
+            "description": "Import/transformation version where applicable."
+          },
+          "notes": {
+            "type": ["string", "null"],
+            "maxLength": 2048,
+            "description": "Maintainer notes about this source."
+          }
+        }
+      }
+    }
+  }
+}
