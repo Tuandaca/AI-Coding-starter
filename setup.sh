@@ -35,7 +35,7 @@ echo "   CONFIGURATION"
 echo "============================================"
 echo ""
 
-"$PYTHON_CMD" "$SCRIPT_DIR/scripts/setup_portable.py"
+"$PYTHON_CMD" "$SCRIPT_DIR/scripts/setup_portable.py" --python "$PYTHON_CMD"
 if [ $? -ne 0 ]; then
     echo "[ERROR] Setup helper failed."
     exit 1
@@ -46,10 +46,10 @@ echo ""
 echo "============================================"
 echo "   CREATING SHORTCUTS"
 echo "============================================"
-cat > "$SCRIPT_DIR/NewPJ.sh" << 'SHORTCUT'
+cat > "$SCRIPT_DIR/NewPJ.sh" << SHORTCUT
 #!/bin/bash
 cd "$(dirname "$0")"
-python3 new_project.py
+"$PYTHON_CMD" new_project.py
 SHORTCUT
 chmod +x "$SCRIPT_DIR/NewPJ.sh"
 echo "[OK] Created: NewPJ.sh"
@@ -60,7 +60,7 @@ echo "   SETUP COMPLETED!"
 echo "============================================"
 echo ""
 echo "Next steps:"
-echo "1. Run: ./NewPJ.sh (or python3 new_project.py)"
+echo "1. Run: ./NewPJ.sh (or $PYTHON_CMD new_project.py)"
 echo "2. Choose project type and tech stack via the UI."
 echo "3. Your project will be created in the selected projects folder."
 echo ""

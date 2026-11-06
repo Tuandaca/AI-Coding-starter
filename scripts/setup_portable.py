@@ -16,7 +16,8 @@ generation to this module so that:
   * No shell interpolation of user-supplied paths occurs anywhere.
 
 Responsibilities:
-  * Detect an available Python interpreter (python3 -> python -> py).
+  * Optionally detect an available Python interpreter (python3 -> python ->
+    py), or accept one via --python.
   * Prompt for / validate the projects directory (absolute, no traversal,
     creatable).
   * Validate bundled resources (<starter>/resources/agents exists).
@@ -178,17 +179,26 @@ def _read_config(starter_dir: Path) -> dict:
 
 def run(starter_dir: Path,
         projects_dir_arg: str | None,
-        non_interactive: bool) -> int:
+        non_interactive: bool,
+        python_arg: str | None = None) -> int:
     """Run the setup helper. Returns an exit code."""
     starter_dir = starter_dir.resolve()
 
-    # 1. Python interpreter detection.
-    python = _find_python()
-    if python is None:
-        print("[ERROR] Python is not installed!")
-        print("      Please install Python from: https://python.org")
-        return 1
-    print(f"[OK] Python found: {python}")
+    # 1. Python interpreter detection (or use explicitly provided interpreter).
+    if python_arg is not None:
+        python = python_arg
+        if shutil.which(python) is None:
+            print(f"[ERROR] Python interpreter not found: {python}")
+            print("      Please install Python from: https://python.org")
+            return 1
+        print(f"[OK] Python found: {python}")
+    else:
+        python = _find_python()
+        if python is None:
+            print("[ERROR] Python is not installed!")
+            print("      Please install Python from: https://python.org")
+            return 1
+        print(f"[OK] Python found: {python}")
 
     # 2. Bundled resources check.
     if not _has_bundled_resources(starter_dir):
@@ -208,7 +218,11 @@ def run(starter_dir: Path,
         print(f"[ERROR] {exc}")
         return 3
 
-    _ensure_creatable(projects_dir)
+    try:
+        _ensure_creatable(projects_dir)
+    except ValueError as exc:
+        print(f"[ERROR] {exc}")
+        return 3
     print(f"[OK] Projects directory: {projects_dir}")
 
     # 4. Write config.json via json.dump (proper escaping).
@@ -261,6 +275,11 @@ def main() -> int:
         action="store_true",
         help="Do not prompt; use --projects-dir or default.",
     )
+    parser.add_argument(
+        "--python",
+        help="Python interpreter to use (python3, python, or py). "
+             "If not provided, the helper auto-detects.",
+    )
     args = parser.parse_args()
 
     # Reconfigure stdout/stderr to handle Unicode paths on Windows console
@@ -278,6 +297,7 @@ def main() -> int:
         starter_dir=starter_dir,
         projects_dir_arg=args.projects_dir,
         non_interactive=args.non_interactive or bool(args.projects_dir),
+        python_arg=args.python,
     )
 
 

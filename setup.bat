@@ -1,5 +1,5 @@
 @echo off
-setlocal
+setlocal enabledelayedexpansion
 
 title AI Coding Starter - Setup Wizard
 echo.
@@ -8,10 +8,11 @@ echo    AI Coding Starter - Setup Wizard
 echo ============================================
 echo.
 
-:: Check Python (try python, python3, py)
-python --version >nul 2>&1
+:: Check Python (try python3, python, py)
+set "PYTHON_CMD="
+python3 --version >nul 2>&1
 if errorlevel 1 (
-    python3 --version >nul 2>&1
+    python --version >nul 2>&1
     if errorlevel 1 (
         py --version >nul 2>&1
         if errorlevel 1 (
@@ -19,10 +20,16 @@ if errorlevel 1 (
             echo Please install Python from: https://python.org
             pause
             exit /b 1
+        ) else (
+            set "PYTHON_CMD=py"
         )
+    ) else (
+        set "PYTHON_CMD=python"
     )
+) else (
+    set "PYTHON_CMD=python3"
 )
-echo [OK] Python found
+echo [OK] Python found: !PYTHON_CMD!
 
 :: Check bundled resources availability
 if exist "%~dp0resources\agents" (
@@ -41,7 +48,7 @@ echo    CONFIGURATION
 echo ============================================
 echo.
 
-python "%~dp0scripts\setup_portable.py"
+"%PYTHON_CMD%" "%~dp0scripts\setup_portable.py" --python "!PYTHON_CMD!"
 if errorlevel 1 (
     echo [ERROR] Setup helper failed.
     pause
@@ -58,7 +65,7 @@ echo title VibeCoding - New Project Creator >> "%~dp0NewPJ.bat"
 echo cd /d "%%~dp0" >> "%~dp0NewPJ.bat"
 echo cls >> "%~dp0NewPJ.bat"
 echo color 0B >> "%~dp0NewPJ.bat"
-echo python new_project.py >> "%~dp0NewPJ.bat"
+echo "!PYTHON_CMD!" new_project.py >> "%~dp0NewPJ.bat"
 echo pause >> "%~dp0NewPJ.bat"
 echo [OK] Created: NewPJ.bat
 

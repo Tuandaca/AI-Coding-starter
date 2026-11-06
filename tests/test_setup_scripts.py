@@ -121,13 +121,15 @@ class TestSetupScriptsStatic(unittest.TestCase):
         self.assertNotIn("sed", self.bat)
 
     def test_setup_bat_creates_newpj_shortcut(self):
+        """setup.bat creates NewPJ.bat (Windows) using the detected interpreter."""
         self.assertIn('echo @echo off', self.bat)
-        self.assertIn("python new_project.py", self.bat)
+        # The generated launcher uses the detected interpreter variable
+        self.assertIn('"!PYTHON_CMD!" new_project.py', self.bat)
 
     def test_setup_sh_creates_newpj_shortcut(self):
         """setup.sh creates NewPJ.sh (POSIX), not NewPJ.bat (Windows)."""
         self.assertIn("NewPJ.sh", self.sh)
-        self.assertIn("python3 new_project.py", self.sh)
+        self.assertIn('"$PYTHON_CMD" new_project.py', self.sh)
 
     # --- M2: Bundled resources validation ---
     def test_setup_bat_validates_bundled_resources(self):
