@@ -1,0 +1,42 @@
+# Core Configuration
+
+version: "1.0.0"
+
+project:
+  name: "AI-Coding-starter"
+  description: "Self-contained AI-assisted coding project starter"
+
+resources:
+  bundled: true
+  external_override: false
+
+generator:
+  default_resource_root: "resources"
+  fallback_to_external: false
+  external_template_env: "MASTER_TEMPLATE_PATH"
+
+paths:
+  # Repository-relative paths
+  resources_root: "resources"
+  config_file: "config.json"
+
+  # Output paths (relative to generated project)
+  output:
+    agents: ".agent/agents"
+    skills: ".agent/skills"
+    workflows: ".agent/workflows"
+    scripts: ".agent/scripts"
+    shared: ".agent/.shared"
+    core: ".agent/core"
+    rules: ".agent/rules"
+    gemini_md: "GEMINI.md"
+    context_md: "CONTEXT.md"
+    readme_md: "README.md"
+    gitignore: ".gitignore"
+
+setup:
+  verify_python: true
+  verify_bundled_resources: true
+  write_config: true
+  create_launcher: true
+  clone_external: false

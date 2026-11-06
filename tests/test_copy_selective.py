@@ -44,7 +44,8 @@ BASE_MERGED = {
 COPIED_FILES = [
     FAKE_MASTER / "agents" / "frontend-specialist.md",
     FAKE_MASTER / "skills" / "modern-web-architect" / "skill.md",
-    FAKE_MASTER / ".shared" / "design-system" / "tokens.md",
+    # INTENTIONAL CHANGE — M2: bundled resources use "shared/" not ".shared/"
+    FAKE_MASTER / "shared" / "design-system" / "tokens.md",
     FAKE_MASTER / "workflows" / "create.md",
     FAKE_MASTER / "scripts" / "checklist.py",
     # core/ and rules/ are copied unconditionally, so included in expected total

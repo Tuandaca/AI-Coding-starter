@@ -17,114 +17,46 @@ if errorlevel 1 (
 )
 echo [OK] Python da cai dat
 
-:: Check Git
-git --version >nul 2>&1
-if errorlevel 1 (
-    echo [ERROR] Git chua duoc cai dat! / Git is not installed!
-    echo Vui long cai dat Git tu / Please install Git from: https://git-scm.com
+:: Check bundled resources availability
+if exist "%~dp0resources\agents" (
+    echo [OK] Bundled resources available: resources\
+) else (
+    echo [ERROR] Bundled resources missing! resources\agents not found.
+    echo [ERROR] Please ensure the resources/ directory is present in this repository.
     pause
     exit /b 1
 )
-echo [OK] Git da cai dat
 
 :: Setup Directories
 echo.
 echo ============================================
 echo    CAU HINH DUONG DAN / PATH CONFIGURATION
 echo ============================================
-set "TEMPLATE_DIR="
+
 set "PROJECTS_DIR="
+set "DEFAULT_BASE=%USERPROFILE%"
 
-set "HAS_TEMPLATE=N"
-set /p "HAS_TEMPLATE=Ban da co san thu muc template VibeCoding chua? / Already have template folder? (Y/N) [N]: "
-if /I "%HAS_TEMPLATE%"=="Y" goto SETUP_EXISTING
+set /p "PROJECTS_DIR=Nhap thu muc luu du an (Enter de dung mac dinh: %DEFAULT_BASE%\Projects) / Enter projects folder [Default: %%DEFAULT_BASE%%\Projects]: "
+if "%PROJECTS_DIR%"=="" set "PROJECTS_DIR=%DEFAULT_BASE%\Projects"
 
-:SETUP_NEW
-set "DEFAULT_BASE=D:"
-if not exist "D:\" set "DEFAULT_BASE=%USERPROFILE%"
-set "USER_BASE="
-set /p "USER_BASE=Nhap thu muc ban muon cai dat (Enter de dung mac dinh: %DEFAULT_BASE%) / Enter installation folder [Default]: "
-if "%USER_BASE%"=="" set "USER_BASE=%DEFAULT_BASE%"
+:: Normalize path separators
+set "PROJECTS_DIR=%PROJECTS_DIR:/=\%"
 
-set "TEMPLATE_DIR=%USER_BASE%\VibeCoding-Template"
-set "PROJECTS_DIR=%USER_BASE%\Projects"
-goto VERIFY_PATHS
-
-:SETUP_EXISTING
-set "TEMPLATE_DIR="
-set /p "TEMPLATE_DIR=Nhap duong dan den thu muc template (vd: D:\VibeCoding-Template) / Enter template path: "
-if "%TEMPLATE_DIR%"=="" goto SETUP_EXISTING
-
-:: Dat thu muc Projects nam ben canh thu muc template
-for %%I in ("%TEMPLATE_DIR%\..") do set "PARENT_DIR=%%~fI"
-set "PROJECTS_DIR=%PARENT_DIR%\Projects"
-goto VERIFY_PATHS
-
-:VERIFY_PATHS
-if not exist "%TEMPLATE_DIR%" mkdir "%TEMPLATE_DIR%" 2>nul
 if not exist "%PROJECTS_DIR%" mkdir "%PROJECTS_DIR%" 2>nul
-echo [OK] Thu muc Master Template: %TEMPLATE_DIR%
 echo [OK] Thu muc Projects: %PROJECTS_DIR%
 
-:: GitHub Template Setup
-echo.
-echo ============================================
-echo    CLONE MASTER TEMPLATE
-echo ============================================
-set "TEMPLATE_URL=https://github.com/Dokhacgiakhoa/antigravity-ide.git"
-
-:CLONE_RETRY
-if exist "%TEMPLATE_DIR%\.git" (
-    echo [OK] Master template da ton tai trong / Master template already exists in: %TEMPLATE_DIR%
-    set "DO_UPDATE=Y"
-    set /p "DO_UPDATE=Ban co muon cap nhat template khong? / Do you want to update the template? (Y/N) [Y]: "
-    goto HANDLE_UPDATE_CHOICE
-) else if exist "%TEMPLATE_DIR%\.agent" (
-    echo [OK] Master template da ton tai nhung khong phai Git repo. / Target is not a Git repo.
-    goto CLONE_DONE
-)
-
-echo Dang clone master template tu %TEMPLATE_URL%...
-git clone "%TEMPLATE_URL%" "%TEMPLATE_DIR%"
-if errorlevel 1 (
-    echo.
-    echo [ERROR] Khong the clone template tu %TEMPLATE_URL%!
-    echo [ERROR] Cannot clone template!
-    set "NEW_URL="
-    set /p "NEW_URL=Nhap link github moi hoac nhan Enter de thu lai / Enter new GitHub URL or press Enter to retry: "
-    goto HANDLE_URL_INPUT
-) else (
-    echo [OK] Da clone master template thanh cong.
-    goto CLONE_DONE
-)
-
-:HANDLE_UPDATE_CHOICE
-if /I "%DO_UPDATE%"=="N" goto CLONE_DONE
-echo.
-echo Dang cap nhat master template tu %TEMPLATE_URL%...
-cd /d "%TEMPLATE_DIR%"
-git remote set-url origin "%TEMPLATE_URL%" 2>nul
-git pull
-cd /d "%~dp0"
-echo [OK] Hoan tat cap nhat template / Finished updating template.
-goto CLONE_DONE
-
-:HANDLE_URL_INPUT
-if not "%NEW_URL%"=="" set "TEMPLATE_URL=%NEW_URL%"
-goto CLONE_RETRY
-
-:CLONE_DONE
-
-:: Create config.json
+:: Create config.json (portable, machine-agnostic)
 echo.
 echo Dang tao file cau hinh / Creating config file...
+set "JSON_PROJECTS_DIR=%PROJECTS_DIR:\=\%"
+
 echo {> "%~dp0config.json"
-:: Replace backslashes with double backslashes for JSON
-set "JSON_TEMPLATE_DIR=%TEMPLATE_DIR:\=\\%"
-set "JSON_PROJECTS_DIR=%PROJECTS_DIR:\=\\%"
-echo   "MASTER_TEMPLATE_PATH": "%JSON_TEMPLATE_DIR%\\.agent",>> "%~dp0config.json"
-echo   "DEFAULT_PROJECT_PATH": "%JSON_PROJECTS_DIR%">> "%~dp0config.json"
+echo   "MASTER_TEMPLATE_PATH": null,>> "%~dp0config.json"
+echo   "DEFAULT_PROJECT_PATH": "%JSON_PROJECTS_DIR%",>> "%~dp0config.json"
+echo   "bundled_resources_enabled": true,>> "%~dp0config.json"
+echo   "external_template_optional": true>> "%~dp0config.json"
 echo }>> "%~dp0config.json"
+
 echo [OK] Da luu cau hinh vao / Saved configuration to: config.json
 
 :: Set up shortcuts
@@ -150,6 +82,7 @@ echo ============================================
 echo.
 echo Cac buoc tiep theo / Next steps:
 echo 1. Double-click "NewPJ.bat" trong thu muc nay de tao du an moi.
-echo 2. Chon cac template agents phu hop theo giao dien.
+echo 2. Chon loai du an va tech stack qua giao dien.
+echo 3. Du an se duoc tao tai: %PROJECTS_DIR%
 echo.
 pause

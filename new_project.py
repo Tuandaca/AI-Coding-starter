@@ -7,7 +7,7 @@ Creates new projects with selective agent/skill copying based on project types.
 Usage:
     python new_project.py           # Create new project
     python new_project.py --stats   # View analytics dashboard
-    
+
 Or via Antigravity chat:
     /new
     new project
@@ -25,18 +25,35 @@ from pathlib import Path
 import json
 
 CONFIG_FILE = Path(__file__).parent / "config.json"
+# Bundled resources are the DEFAULT source
+BUNDLED_RESOURCE_ROOT = Path(__file__).parent / "resources"
+
+# MASTER_TEMPLATE_PATH is now OPTIONAL compatibility fallback
 if CONFIG_FILE.exists():
     try:
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             _config = json.load(f)
-        MASTER_TEMPLATE_PATH = Path(_config.get("MASTER_TEMPLATE_PATH", r"D:\VibeCoding-Template\.agent"))
-        DEFAULT_PROJECT_PATH = Path(_config.get("DEFAULT_PROJECT_PATH", r"D:\Projects"))
+        # External template is optional - only used as fallback if bundled resources unavailable
+        _external = _config.get("MASTER_TEMPLATE_PATH")
+        MASTER_TEMPLATE_PATH = Path(_external) if _external else None
+        DEFAULT_PROJECT_PATH = Path(_config.get("DEFAULT_PROJECT_PATH", str(Path.home() / "Projects")))
     except Exception:
-        MASTER_TEMPLATE_PATH = Path(r"D:\VibeCoding-Template\.agent")
-        DEFAULT_PROJECT_PATH = Path(r"D:\Projects")
+        MASTER_TEMPLATE_PATH = None
+        DEFAULT_PROJECT_PATH = Path.home() / "Projects"
 else:
-    MASTER_TEMPLATE_PATH = Path(r"D:\VibeCoding-Template\.agent")
-    DEFAULT_PROJECT_PATH = Path(r"D:\Projects")
+    MASTER_TEMPLATE_PATH = None
+    DEFAULT_PROJECT_PATH = Path.home() / "Projects"
+
+# Determine effective resource root (bundled canonical, external as optional fallback)
+def get_resource_root() -> Path:
+    """Get the effective resource root. Bundled is canonical; external is optional fallback."""
+    # Bundled resources are the default source (works offline by default)
+    if BUNDLED_RESOURCE_ROOT.exists():
+        return BUNDLED_RESOURCE_ROOT
+    # External template only as fallback when bundled resources unavailable
+    if MASTER_TEMPLATE_PATH and MASTER_TEMPLATE_PATH.exists():
+        return MASTER_TEMPLATE_PATH
+    return BUNDLED_RESOURCE_ROOT
 
 MAX_TYPES = 3
 STARTER_PATH = Path(__file__).parent
@@ -373,7 +390,7 @@ CUSTOM_STACK_OPTIONS = {
 }
 
 # Project Type Matrix - Maps project types to required agents, skills, and shared modules
-# Based on actual files in D:\VibeCoding-Template\.agent
+# Based on actual files in the bundled resources/ directory
 PROJECT_TYPES = {
     "personal-web": {
         "name": "🌐 Personal Web / Portfolio",
@@ -645,7 +662,7 @@ def get_git_user():
 def check_tools():
     """Check installed tools and versions."""
     tools = {}
-    
+
     # Checkers map: name -> specific command flag
     checkers = {
         "node": "node -v",
@@ -658,9 +675,9 @@ def check_tools():
         "bun": "bun -v",
         "docker": "docker -v"
     }
-    
+
     print("\n  🕵️‍♂️  Auto-Discovery System:")
-    
+
     for tool, cmd in checkers.items():
         ver = get_cmd_output(cmd)
         if ver:
@@ -669,12 +686,12 @@ def check_tools():
             # Remove "v" prefix if mostly numbers
             if ver.startswith('v') and ver[1].isdigit():
                 ver = ver[1:]
-            
+
             tools[tool] = ver
             print(f"    ✅ {tool.ljust(10)} : {ver}")
         else:
             print(f"    ❌ {tool.ljust(10)} : Not found")
-            
+
     return tools
 
 def detect_os_info():
@@ -730,30 +747,30 @@ def select_multiple(options, max_select=3):
     """
     print("\n  Chọn loại dự án (nhập số, cách nhau bởi dấu phẩy):")
     print(f"  ⚠️  Tối đa {max_select} loại\n")
-    
+
     keys = list(options.keys())
     for i, key in enumerate(keys, 1):
         info = options[key]
         print(f"    {i}. {info['name']}")
         print(f"       {info['description']}\n")
-    
+
     while True:
         selection = get_input("Nhập lựa chọn (ví dụ: 1,2)")
-        
+
         try:
             indices = [int(x.strip()) - 1 for x in selection.split(",")]
             selected_keys = [keys[i] for i in indices if 0 <= i < len(keys)]
-            
+
             if not selected_keys:
                 print_error("Vui lòng chọn ít nhất 1 loại!")
                 continue
-            
+
             if len(selected_keys) > max_select:
                 print_error(f"Chỉ được chọn tối đa {max_select} loại!")
                 continue
-            
+
             return selected_keys
-            
+
         except (ValueError, IndexError):
             print_error("Lựa chọn không hợp lệ! Nhập số cách nhau bởi dấu phẩy.")
 
@@ -764,7 +781,7 @@ def get_presets_for_types(selected_types):
     """
     all_presets = []
     seen_ids = set()
-    
+
     for type_key in selected_types:
         if type_key in TECH_PRESETS:
             for preset in TECH_PRESETS[type_key]["presets"]:
@@ -773,10 +790,10 @@ def get_presets_for_types(selected_types):
                     preset_copy["from_type"] = type_key
                     all_presets.append(preset_copy)
                     seen_ids.add(preset["id"])
-    
+
     # Sort: recommended first, then by name
     all_presets.sort(key=lambda x: (not x.get("recommended", False), x["name"]))
-    
+
     return all_presets
 
 def merge_tech_stacks(preset_list):
@@ -786,11 +803,11 @@ def merge_tech_stacks(preset_list):
     """
     fields = ["frontend", "backend", "database", "styling", "hosting"]
     merged = {"type": "preset", "extras": []}
-    
+
     # Collect preset names
     names = [p["name"] for p in preset_list]
     merged["preset_name"] = " + ".join(names)
-    
+
     # Merge each field, keeping unique values in order
     for field in fields:
         seen = []
@@ -799,7 +816,7 @@ def merge_tech_stacks(preset_list):
             if val and val not in seen:
                 seen.append(val)
         merged[field] = " + ".join(seen) if seen else "TBD"
-    
+
     # Merge extras
     seen_extras = []
     for preset in preset_list:
@@ -807,7 +824,7 @@ def merge_tech_stacks(preset_list):
             if extra not in seen_extras:
                 seen_extras.append(extra)
     merged["extras"] = seen_extras
-    
+
     return merged
 
 def select_tech_stack(selected_types):
@@ -819,18 +836,18 @@ def select_tech_stack(selected_types):
     print("\n" + "=" * 60)
     print("  🔧 CHỌN TECH STACK")
     print("=" * 60)
-    
+
     # Get available presets for selected types
     presets = get_presets_for_types(selected_types)
-    
+
     if len(selected_types) > 1:
         type_names = [PROJECT_TYPES[t]["name"] for t in selected_types]
         print(f"\n  📌 Multi-type: {', '.join(type_names)}")
         print("  ℹ️  Hiển thị presets phù hợp với tất cả types đã chọn")
-    
+
     max_presets = min(3, len(presets))
     print(f"\n  Chọn preset (tối đa {max_presets}, cách nhau bởi dấu phẩy) hoặc tự custom:\n")
-    
+
     for i, preset in enumerate(presets, 1):
         recommended = " ⭐ RECOMMENDED" if preset.get("recommended") else ""
         print(f"    [{i}] {preset['name']}{recommended}")
@@ -839,21 +856,21 @@ def select_tech_stack(selected_types):
             from_type = PROJECT_TYPES[preset['from_type']]['name']
             print(f"        📁 From: {from_type}")
         print()
-    
+
     # Additional options
     custom_idx = len(presets) + 1
     skip_idx = len(presets) + 2
-    
+
     print(f"    [{custom_idx}] 🔧 Custom (Tự chọn từng thành phần)")
     print(f"    [{skip_idx}] ⏭️  Skip (Để AI tự đề xuất sau)\n")
-    
+
     while True:
         selection = get_input(f"Lựa chọn (ví dụ: 1 hoặc 1,3) [1-{skip_idx}]", "1")
-        
+
         try:
             # Parse comma-separated input
             indices = [int(x.strip()) for x in selection.split(",")]
-            
+
             # Check for custom or skip (must be standalone)
             if len(indices) == 1:
                 idx = indices[0]
@@ -869,12 +886,12 @@ def select_tech_stack(selected_types):
                         "hosting": "TBD (AI will recommend)",
                         "extras": []
                     }
-            
+
             # Validate: custom/skip cannot be combined with presets
             if any(idx in (custom_idx, skip_idx) for idx in indices) and len(indices) > 1:
                 print_error("Custom và Skip không thể kết hợp với preset khác!")
                 continue
-            
+
             # Validate preset indices
             selected_presets = []
             valid = True
@@ -885,18 +902,18 @@ def select_tech_stack(selected_types):
                     print_error(f"Số {idx} không hợp lệ! Chọn từ 1-{skip_idx}")
                     valid = False
                     break
-            
+
             if not valid:
                 continue
-            
+
             if not selected_presets:
                 print_error("Vui lòng chọn ít nhất 1 preset!")
                 continue
-            
+
             if len(selected_presets) > 3:
                 print_error("Chỉ được chọn tối đa 3 presets!")
                 continue
-            
+
             # Remove duplicates while keeping order
             seen_ids = set()
             unique_presets = []
@@ -905,7 +922,7 @@ def select_tech_stack(selected_types):
                     seen_ids.add(p["id"])
                     unique_presets.append(p)
             selected_presets = unique_presets
-            
+
             # Show confirmation for multi-preset
             if len(selected_presets) > 1:
                 print(f"\n  📦 Đã chọn {len(selected_presets)} presets:")
@@ -920,7 +937,7 @@ def select_tech_stack(selected_types):
                 print(f"     Hosting:  {merged_stack['hosting']}")
                 if merged_stack['extras']:
                     print(f"     Extras:   {', '.join(merged_stack['extras'])}")
-                
+
                 confirm = get_input("\n  Xác nhận? (y/n)", "y")
                 if confirm.lower() != 'y':
                     continue
@@ -938,7 +955,7 @@ def select_tech_stack(selected_types):
                     "hosting": preset["hosting"],
                     "extras": preset.get("extras", [])
                 }
-                
+
         except ValueError:
             print_error("Vui lòng nhập số hợp lệ! (ví dụ: 1 hoặc 1,3)")
 
@@ -948,44 +965,44 @@ def select_custom_stack():
     Returns dict with selected options.
     """
     print("\n  🔧 CUSTOM STACK - Chọn từng thành phần:\n")
-    
+
     result = {"type": "custom", "extras": []}
-    
+
     # Frontend
     print("  Frontend:")
     for i, (key, name) in enumerate(CUSTOM_STACK_OPTIONS["frontend"], 1):
         print(f"    [{i}] {name}")
     idx = int(get_input("Chọn frontend", "1")) - 1
     result["frontend"] = CUSTOM_STACK_OPTIONS["frontend"][idx][1]
-    
+
     # Backend
     print("\n  Backend:")
     for i, (key, name) in enumerate(CUSTOM_STACK_OPTIONS["backend"], 1):
         print(f"    [{i}] {name}")
     idx = int(get_input("Chọn backend", "1")) - 1
     result["backend"] = CUSTOM_STACK_OPTIONS["backend"][idx][1]
-    
+
     # Database
     print("\n  Database:")
     for i, (key, name) in enumerate(CUSTOM_STACK_OPTIONS["database"], 1):
         print(f"    [{i}] {name}")
     idx = int(get_input("Chọn database", "1")) - 1
     result["database"] = CUSTOM_STACK_OPTIONS["database"][idx][1]
-    
+
     # Styling
     print("\n  Styling:")
     for i, (key, name) in enumerate(CUSTOM_STACK_OPTIONS["styling"], 1):
         print(f"    [{i}] {name}")
     idx = int(get_input("Chọn styling", "1")) - 1
     result["styling"] = CUSTOM_STACK_OPTIONS["styling"][idx][1]
-    
+
     # Hosting
     print("\n  Hosting:")
     for i, (key, name) in enumerate(CUSTOM_STACK_OPTIONS["hosting"], 1):
         print(f"    [{i}] {name}")
     idx = int(get_input("Chọn hosting", "1")) - 1
     result["hosting"] = CUSTOM_STACK_OPTIONS["hosting"][idx][1]
-    
+
     return result
 
 def merge_requirements(selected_types):
@@ -1001,7 +1018,7 @@ def merge_requirements(selected_types):
         "scripts": set(),
         "focus": []
     }
-    
+
     for type_key in selected_types:
         config = PROJECT_TYPES[type_key]
         merged["agents"].update(config.get("agents", []))
@@ -1010,14 +1027,14 @@ def merge_requirements(selected_types):
         merged["workflows"].update(config.get("workflows", []))
         merged["scripts"].update(config.get("scripts", []))
         merged["focus"].append(config.get("focus", ""))
-    
+
     # Add extra workflows (VibeCoding enhancements)
     merged["workflows"].update(EXTRA_WORKFLOWS)
-    
+
     # Convert sets to sorted lists
     for key in ["agents", "skills", "shared", "workflows", "scripts"]:
         merged[key] = sorted(list(merged[key]))
-    
+
     return merged
 
 def copy_selective(source_base, dest_base, merged_req, project_name, selected_types, tech_stack=None, env_info=None):
@@ -1026,19 +1043,19 @@ def copy_selective(source_base, dest_base, merged_req, project_name, selected_ty
     Returns total bytes copied.
     """
     total_bytes = 0
-    
+
     # Ensure destination exists
     dest_base = Path(dest_base)
     dest_base.mkdir(parents=True, exist_ok=True)
-    
+
     source_base = Path(source_base)
-    
+
     # Copy agents
     print("\n  📁 Copying agents...")
     agents_src = source_base / "agents"
     agents_dest = dest_base / "agents"
     agents_dest.mkdir(exist_ok=True)
-    
+
     for agent in merged_req["agents"]:
         src_file = agents_src / agent
         if src_file.exists():
@@ -1047,13 +1064,13 @@ def copy_selective(source_base, dest_base, merged_req, project_name, selected_ty
             print_success(f"agents/{agent}")
         else:
             print_info(f"Skip (not found): agents/{agent}")
-    
+
     # Copy skills
     print("\n  📁 Copying skills...")
     skills_src = source_base / "skills"
     skills_dest = dest_base / "skills"
     skills_dest.mkdir(exist_ok=True)
-    
+
     for skill in merged_req["skills"]:
         src_dir = skills_src / skill
         if src_dir.exists() and src_dir.is_dir():
@@ -1063,13 +1080,13 @@ def copy_selective(source_base, dest_base, merged_req, project_name, selected_ty
             print_success(f"skills/{skill}/")
         else:
             print_info(f"Skip (not found): skills/{skill}")
-    
+
     # Copy shared modules
     print("\n  📁 Copying shared modules...")
-    shared_src = source_base / ".shared"
+    shared_src = source_base / "shared"
     shared_dest = dest_base / ".shared"
     shared_dest.mkdir(exist_ok=True)
-    
+
     for module in merged_req["shared"]:
         src_dir = shared_src / module
         if src_dir.exists() and src_dir.is_dir():
@@ -1079,36 +1096,36 @@ def copy_selective(source_base, dest_base, merged_req, project_name, selected_ty
             print_success(f".shared/{module}/")
         else:
             print_info(f"Skip (not found): .shared/{module}")
-    
+
     # Copy workflows
     print("\n  📁 Copying workflows...")
     workflows_src = source_base / "workflows"
     starter_workflows_src = STARTER_PATH / ".agent" / "workflows"
-    
+
     workflows_dest = dest_base / "workflows"
     workflows_dest.mkdir(exist_ok=True)
-    
+
     for workflow in merged_req["workflows"]:
         # Try finding in master template
         src_file = workflows_src / workflow
-        
+
         # If not found, try finding in starter .agent
         if not src_file.exists():
             src_file = starter_workflows_src / workflow
-            
+
         if src_file.exists():
             shutil.copy2(src_file, workflows_dest / workflow)
             total_bytes += src_file.stat().st_size
             print_success(f"workflows/{workflow}")
         else:
             print_info(f"Skip (not found): workflows/{workflow}")
-            
+
     # Copy scripts
     print("\n  📁 Copying scripts...")
     scripts_src = source_base / "scripts"
     scripts_dest = dest_base / "scripts"
     scripts_dest.mkdir(exist_ok=True)
-    
+
     for script in merged_req["scripts"]:
         src_file = scripts_src / script
         if src_file.exists():
@@ -1117,48 +1134,48 @@ def copy_selective(source_base, dest_base, merged_req, project_name, selected_ty
             print_success(f"scripts/{script}")
         else:
             print_info(f"Skip (not found): scripts/{script}")
-    
+
     # Copy core folder (rules, etc.)
     print("\n  📁 Copying core configuration...")
     core_src = source_base / "core"
     rules_src = source_base / "rules"
-    
+
     if core_src.exists():
         core_dest = dest_base / "core"
         shutil.copytree(core_src, core_dest, dirs_exist_ok=True)
         size = sum(f.stat().st_size for f in core_src.rglob('*') if f.is_file())
         total_bytes += size
         print_success("core/")
-    
+
     if rules_src.exists():
         rules_dest = dest_base / "rules"
         shutil.copytree(rules_src, rules_dest, dirs_exist_ok=True)
         size = sum(f.stat().st_size for f in rules_src.rglob('*') if f.is_file())
         total_bytes += size
         print_success("rules/")
-    
+
     # Generate GEMINI.md
     print("\n  📄 Generating GEMINI.md...")
     generate_gemini_md(dest_base, project_name, selected_types, merged_req, tech_stack, env_info)
     print_success("GEMINI.md")
-    
+
     # Generate CONTEXT.md for project memory
     print("\n  📄 Generating CONTEXT.md...")
     generate_context_md(dest_base, project_name, selected_types, tech_stack)
     print_success("CONTEXT.md")
-    
+
     return total_bytes
 
 def generate_gemini_md(dest_base, project_name, selected_types, merged_req, tech_stack=None, env_info=None):
     """Generate customized GEMINI.md based on project types and tech stack."""
-    
+
     type_names = [PROJECT_TYPES[t]["name"] for t in selected_types]
     focus_areas = " | ".join(merged_req["focus"])
-    
+
     agent_list = "\n".join([f"- `{a.replace('.md', '')}`" for a in merged_req["agents"]])
     skill_list = "\n".join([f"- `{s}`" for s in merged_req["skills"]])
     workflow_list = "\n".join([f"- `/{w.replace('.md', '')}`" for w in merged_req["workflows"]])
-    
+
     # Tech stack section
     if tech_stack and tech_stack.get("type") != "skip":
         extras_str = ", ".join(tech_stack.get("extras", [])) if tech_stack.get("extras") else "None"
@@ -1179,7 +1196,7 @@ def generate_gemini_md(dest_base, project_name, selected_types, merged_req, tech
         tech_stack_section = '''## 🛠️ Tech Stack
 
 > 💡 Tech stack chưa được định nghĩa. AI sẽ đề xuất dựa trên yêu cầu của bạn.
-> 
+>
 > Để định nghĩa, hãy trả lời các câu hỏi sau khi AI hỏi, hoặc edit file này trực tiếp.
 '''
 
@@ -1189,9 +1206,9 @@ def generate_gemini_md(dest_base, project_name, selected_types, merged_req, tech
         git_user = env_info.get("git_user", {})
         tools = env_info.get("tools", {})
         os_info = env_info.get("os_info", {})
-        
+
         tools_list = "\n".join([f"- **{k.capitalize()}**: {v}" for k, v in tools.items()])
-        
+
         env_section = f'''
 ## 🌍 Environment Context
 
@@ -1201,7 +1218,7 @@ def generate_gemini_md(dest_base, project_name, selected_types, merged_req, tech
 ### 🛠️ Available Tools:
 {tools_list}
 '''
-    
+
     content = f'''---
 trigger: always_on
 ---
@@ -1282,10 +1299,10 @@ Add your project-specific guidelines here:
 *Types: {", ".join(selected_types)}*
 *Created: {__import__("datetime").datetime.now().strftime("%Y-%m-%d %H:%M")}*
 '''
-    
+
     gemini_path = Path(dest_base) / "GEMINI.md"
     gemini_path.write_text(content, encoding="utf-8")
-    
+
     # Also copy rules/GEMINI.md if it contains important base rules
     rules_gemini = Path(dest_base) / "rules" / "GEMINI.md"
     if rules_gemini.exists():
@@ -1295,10 +1312,10 @@ Add your project-specific guidelines here:
 def generate_context_md(dest_base, project_name, selected_types, tech_stack=None):
     """Generate CONTEXT.md for project memory/context tracking."""
     from datetime import datetime
-    
+
     type_names = [PROJECT_TYPES[t]["name"] for t in selected_types]
     today = datetime.now().strftime("%Y-%m-%d")
-    
+
     # Tech stack info for context
     if tech_stack and tech_stack.get("type") != "skip":
         tech_info = f"""- Frontend: {tech_stack.get("frontend", "TBD")}
@@ -1308,7 +1325,7 @@ def generate_context_md(dest_base, project_name, selected_types, tech_stack=None
 - Hosting: {tech_stack.get("hosting", "TBD")}"""
     else:
         tech_info = "- (Chưa định nghĩa - AI sẽ đề xuất)"
-    
+
     content = f'''# 📋 PROJECT CONTEXT - {project_name}
 
 > **QUAN TRỌNG**: File này giúp AI nhớ context dự án giữa các sessions.
@@ -1328,7 +1345,7 @@ def generate_context_md(dest_base, project_name, selected_types, tech_stack=None
 ### Phases:
 - Not Started
 - Planning
-- Development  
+- Development
 - Testing
 - Production
 
@@ -1403,7 +1420,7 @@ Ghi chú thêm:
 *Auto-generated by VibeCoding*
 *Update this file regularly for better AI context!*
 '''
-    
+
     context_path = Path(dest_base) / "CONTEXT.md"
     context_path.write_text(content, encoding="utf-8")
 
@@ -1421,27 +1438,25 @@ def format_size(bytes_count):
 
 def main():
     """Main wizard flow."""
-    global MASTER_TEMPLATE_PATH
-    
+
     print_header()
-    
-    # Step 1: Check master template (with fallback)
-    if not MASTER_TEMPLATE_PATH.exists():
-        # Try fallback to current directory
-        if (Path.cwd() / ".agent").exists():
-            MASTER_TEMPLATE_PATH = Path.cwd() / ".agent"
-        else:
-            print_error(f"Master template not found at: {MASTER_TEMPLATE_PATH}")
-            print()
-            print_info("Please clone the template first by running setup.bat or:")
-            print()
-            print(f'    git clone https://github.com/Dokhacgiakhoa/antigravity-ide.git "{MASTER_TEMPLATE_PATH.parent}"')
-            print()
-            sys.exit(1)
-    
-    print_success(f"Master template found: {MASTER_TEMPLATE_PATH}")
+
+    # Step 1: Resolve resource root (bundled is default, external is optional)
+    resource_root = get_resource_root()
+
+    if resource_root is BUNDLED_RESOURCE_ROOT:
+        print_success(f"Using bundled resources: {resource_root}")
+    elif MASTER_TEMPLATE_PATH is not None:
+        print_success(f"Using external template (compatibility override): {resource_root}")
+    else:
+        print_error("No resource root available. Bundled resources are missing.")
+        print()
+        print_info("Ensure the 'resources/' directory exists in the starter repository.")
+        print()
+        sys.exit(1)
+
     print_header()
-    
+
     # Step 0: Auto-Discovery
     env_info = {
         "git_user": get_git_user(),
@@ -1450,23 +1465,23 @@ def main():
     }
     print(f"    🖥️  System: {env_info['os_info']['os']} | Shell: {env_info['os_info']['shell']}")
     print(f"    👤 Git User: {env_info['git_user']['name']} <{env_info['git_user']['email']}>\n")
-    
+
     # Step 1: Get project name
     project_name = get_input("Tên dự án", "my-project")
-    
+
     # Validate project name
     project_name = project_name.replace(" ", "-").lower()
-    
+
     # Step 3: Get project path
     project_path = get_input("Đường dẫn dự án", str(DEFAULT_PROJECT_PATH))
     project_path = Path(project_path)
-    
+
     # Ensure project path exists
     project_path.mkdir(parents=True, exist_ok=True)
-    
+
     full_project_path = project_path / project_name
     agent_path = full_project_path / ".agent"
-    
+
     # Check if already exists
     if agent_path.exists():
         overwrite = get_input(f"Dự án đã tồn tại! Ghi đè? (y/n)", "n")
@@ -1474,13 +1489,13 @@ def main():
             print_info("Đã hủy.")
             sys.exit(0)
         shutil.rmtree(agent_path)
-    
+
     # Step 4: Select project types
     selected_types = select_multiple(PROJECT_TYPES, MAX_TYPES)
-    
+
     # Step 5: Select tech stack
     tech_stack = select_tech_stack(selected_types)
-    
+
     # Step 6: Show summary and confirm
     print("\n" + "-" * 60)
     print("  📋 TÓM TẮT")
@@ -1488,7 +1503,7 @@ def main():
     print(f"  Tên dự án: {project_name}")
     print(f"  Đường dẫn: {full_project_path}")
     print(f"  Loại dự án: {', '.join([PROJECT_TYPES[t]['name'] for t in selected_types])}")
-    
+
     # Show tech stack summary
     if tech_stack.get("type") == "preset":
         preset_name = tech_stack.get('preset_name', 'Preset')
@@ -1502,7 +1517,7 @@ def main():
         print(f"  Tech Stack: Custom ({tech_stack.get('frontend', '')})")
     else:
         print("  Tech Stack: Skip (AI sẽ đề xuất sau)")
-    
+
     merged = merge_requirements(selected_types)
     print(f"\n  Agents: {len(merged['agents'])}")
     print(f"  Skills: {len(merged['skills'])}")
@@ -1510,22 +1525,22 @@ def main():
     print(f"  Workflows: {len(merged['workflows'])}")
     print(f"  Scripts: {len(merged['scripts'])}")
     print("-" * 60)
-    
+
     confirm = get_input("\nTạo dự án? (y/n)", "y")
     if confirm.lower() != 'y':
         print_info("Đã hủy.")
         sys.exit(0)
-    
+
     # Create project folder
     full_project_path.mkdir(parents=True, exist_ok=True)
-    
+
     # Step 7: Copy files
     print("\n" + "=" * 60)
     print("  🚀 ĐANG TẠO DỰ ÁN...")
     print("=" * 60)
-    
+
     total_bytes = copy_selective(
-        MASTER_TEMPLATE_PATH,
+        resource_root,
         agent_path,
         merged,
         project_name,
@@ -1533,7 +1548,7 @@ def main():
         tech_stack,
         env_info  # Pass env_info to copy_selective
     )
-    
+
     # Create README.md for the project
     readme_content = f'''# {project_name.replace("-", " ").title()}
 
@@ -1557,7 +1572,7 @@ def main():
 '''
     readme_path = full_project_path / "README.md"
     readme_path.write_text(readme_content, encoding="utf-8")
-    
+
     # Create .gitignore
     print("\n  📄 Creating .gitignore...")
     gitignore_content = '''# ===================================
@@ -1634,7 +1649,7 @@ temp/
 # ===================================
 # The .agent folder IS safe to commit!
 # It contains AI configuration, not secrets.
-# 
+#
 # DO NOT add .agent to gitignore unless you
 # specifically don't want to share AI config.
 # ===================================
@@ -1642,7 +1657,7 @@ temp/
     gitignore_path = full_project_path / ".gitignore"
     gitignore_path.write_text(gitignore_content, encoding="utf-8")
     print_success(".gitignore")
-    
+
     # Track project in analytics
     try:
         from analytics import track_project
@@ -1656,19 +1671,19 @@ temp/
         print_success("Analytics tracked")
     except ImportError:
         pass  # Analytics module not available
-    
+
     # Step 7: Show success
     print("\n" + "=" * 60)
     print("  ✅ HOÀN TẤT!")
     print("=" * 60)
     print(f"\n  📂 Dự án: {full_project_path}")
     print(f"  📦 Kích thước: {format_size(total_bytes)}")
-    
+
     # Calculate savings (assume full template is ~10MB)
     full_size = 10 * 1024 * 1024
     savings = max(0, 100 - (total_bytes / full_size * 100))
     print(f"  💾 Tiết kiệm: ~{savings:.0f}% so với full template")
-    
+
     print("\n  📌 Bước tiếp theo:")
     print(f"     1. Mở folder '{full_project_path}' trong Antigravity")
     print("     2. Gõ: \"Đọc nội dung .agent/GEMINI.md\"")
@@ -1686,7 +1701,7 @@ if __name__ == "__main__":
             print("\n  ❌ analytics.py not found. Please check installation.")
             sys.exit(1)
         sys.exit(0)
-    
+
     try:
         main()
     except KeyboardInterrupt:

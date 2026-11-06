@@ -10,14 +10,22 @@ Coverage (area 1: Config loading):
   - hard-coded fallback values
   - Windows path handling
 
-Deterministic, offline, temp-dir only. config.json is never modified.
+M2 CHANGE LOG (INTENTIONAL CHANGES):
+- DEFAULT_MASTER is now None instead of Path(r"D:\VibeCoding-Template\.agent").
+- DEFAULT_PROJECT is now Path.home() / "Projects" instead of Path(r"D:\Projects").
+- CONFIG_LOAD_SOURCE mirror updated to match new new_project.py config-loading block.
+- test_import_loads_real_config_json: updated expected values for null master path.
+- test_missing_config_file_uses_fallback_defaults: updated expected defaults.
+- test_malformed_json_uses_fallback_defaults: updated expected defaults.
 
-new_project.py loads config at import time via a top-level block (lines
-28-39) that is not wrapped in a function, so it cannot be invoked
-directly. This test file executes the exact same statements (verbatim,
-including the same default strings) in an isolated namespace pointed at
-a temp config.json. A consistency test guards that this mirror matches
-the values the real module loaded from the real config.json.
+new_project.py loads config at import time via a top-level block that is not
+wrapped in a function, so it cannot be invoked directly. This test file
+executes the exact same statements (verbatim, including the same default
+strings) in an isolated namespace pointed at a temp config.json. A consistency
+test guards that this mirror matches the values the real module loaded from
+the real config.json.
+
+Deterministic, offline, temp-dir only. config.json is never modified.
 """
 import json
 import shutil
@@ -33,25 +41,28 @@ if str(REPO_ROOT) not in sys.path:
 import new_project  # noqa: E402  (module import loads the real config.json)
 
 REAL_CONFIG = Path(new_project.__file__).resolve().parent / "config.json"
-DEFAULT_MASTER = Path(r"D:\VibeCoding-Template\.agent")
-DEFAULT_PROJECT = Path(r"D:\Projects")
+# INTENTIONAL CHANGE — M2: Defaults are now portable (None, home-relative).
+DEFAULT_MASTER = None
+DEFAULT_PROJECT = Path.home() / "Projects"
 
 FIXTURE_CONFIGS = REPO_ROOT / "tests" / "fixtures" / "configs"
 
 # Verbatim mirror of new_project.py's module-level config-loading block.
+# INTENTIONAL CHANGE — M2: Updated to match new config-loading block.
 CONFIG_LOAD_SOURCE = r'''
 if CONFIG_FILE.exists():
     try:
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             _config = json.load(f)
-        MASTER_TEMPLATE_PATH = Path(_config.get("MASTER_TEMPLATE_PATH", r"D:\VibeCoding-Template\.agent"))
-        DEFAULT_PROJECT_PATH = Path(_config.get("DEFAULT_PROJECT_PATH", r"D:\Projects"))
+        _external = _config.get("MASTER_TEMPLATE_PATH")
+        MASTER_TEMPLATE_PATH = Path(_external) if _external else None
+        DEFAULT_PROJECT_PATH = Path(_config.get("DEFAULT_PROJECT_PATH", str(Path.home() / "Projects")))
     except Exception:
-        MASTER_TEMPLATE_PATH = Path(r"D:\VibeCoding-Template\.agent")
-        DEFAULT_PROJECT_PATH = Path(r"D:\Projects")
+        MASTER_TEMPLATE_PATH = None
+        DEFAULT_PROJECT_PATH = Path.home() / "Projects"
 else:
-    MASTER_TEMPLATE_PATH = Path(r"D:\VibeCoding-Template\.agent")
-    DEFAULT_PROJECT_PATH = Path(r"D:\Projects")
+    MASTER_TEMPLATE_PATH = None
+    DEFAULT_PROJECT_PATH = Path.home() / "Projects"
 '''
 
 
@@ -87,8 +98,8 @@ class TestImportAndValidConfig(unittest.TestCase):
                 "DEFAULT_PROJECT_PATH": r"D:\Projects",
             }))
             master, project = load_config_from(cfg)
-        self.assertEqual(master, DEFAULT_MASTER)
-        self.assertEqual(project, DEFAULT_PROJECT)
+        self.assertEqual(master, Path(r"D:\VibeCoding-Template\.agent"))
+        self.assertEqual(project, Path(r"D:\Projects"))
 
     def test_windows_path_handling(self):
         with tempfile.TemporaryDirectory() as td:

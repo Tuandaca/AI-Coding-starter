@@ -14,60 +14,78 @@ if ! command -v python3 &> /dev/null; then
 fi
 echo "[OK] Python đã cài đặt"
 
-# Check Git
-if ! command -v git &> /dev/null; then
-    echo "[ERROR] Git chưa được cài đặt!"
-    echo "Vui lòng cài đặt Git từ: https://git-scm.com"
+# Check bundled resources availability
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -d "$SCRIPT_DIR/resources/agents" ]; then
+    echo "[OK] Bundled resources available: resources/"
+else
+    echo "[ERROR] Bundled resources missing! resources/agents not found."
+    echo "[ERROR] Please ensure the resources/ directory is present in this repository."
     exit 1
 fi
-echo "[OK] Git đã cài đặt"
 
-# Set default paths
-TEMPLATE_PATH="$HOME/VibeCoding-Template"
+# Set default projects path
 PROJECTS_PATH="$HOME/Projects"
 
 echo ""
-echo "Đang tạo các thư mục mặc định..."
+echo "============================================"
+echo "   CAU HINH DUONG DAN / PATH CONFIGURATION"
+echo "============================================"
+echo ""
 
-# Clone template if not exists
-if [ ! -d "$TEMPLATE_PATH" ]; then
-    echo "Đang clone master template..."
-    git clone https://github.com/Dokhacgiakhoa/google-antigravity.git "$TEMPLATE_PATH"
-    if [ $? -ne 0 ]; then
-        echo "[ERROR] Không thể clone template!"
-        exit 1
-    fi
-    echo "[OK] Đã clone master template"
-else
-    echo "[OK] Master template đã tồn tại"
+read -p "Nhap thu muc luu du an (Enter de dung mac dinh: $PROJECTS_PATH) / Enter projects folder [Default: $PROJECTS_PATH]: " INPUT_PATH
+if [ -n "$INPUT_PATH" ]; then
+    PROJECTS_PATH="$INPUT_PATH"
 fi
 
 # Create Projects folder
-if [ ! -d "$PROJECTS_PATH" ]; then
-    mkdir -p "$PROJECTS_PATH"
-    echo "[OK] Đã tạo thư mục $PROJECTS_PATH"
-else
-    echo "[OK] Thư mục $PROJECTS_PATH đã tồn tại"
-fi
+mkdir -p "$PROJECTS_PATH" 2>/dev/null
+echo "[OK] Thu muc Projects: $PROJECTS_PATH"
 
-# Update paths in new_project.py for Mac/Linux
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-sed -i.bak "s|D:\\\\VibeCoding-Template|$TEMPLATE_PATH|g" "$SCRIPT_DIR/new_project.py"
-sed -i.bak "s|D:\\\\Projects|$PROJECTS_PATH|g" "$SCRIPT_DIR/new_project.py"
+# Create config.json (portable, machine-agnostic)
+echo ""
+echo "Dang tao file cau hinh / Creating config file..."
 
-# Copy to Projects
-cp "$SCRIPT_DIR/new_project.py" "$PROJECTS_PATH/"
+cat > "$SCRIPT_DIR/config.json" << EOF
+{
+  "MASTER_TEMPLATE_PATH": null,
+  "DEFAULT_PROJECT_PATH": "$PROJECTS_PATH",
+  "bundled_resources_enabled": true,
+  "external_template_optional": true
+}
+EOF
+
+echo "[OK] Da luu cau hinh vao / Saved configuration to: config.json"
+
+# Set up shortcuts
+echo ""
+echo "============================================"
+echo "   TAO SHORTCUT / CREATING SHORTCUTS"
+echo "============================================"
+
+# Create local NewPJ launcher
+cat > "$SCRIPT_DIR/NewPJ.bat" << 'SHORTCUT'
+@echo off
+title VibeCoding - New Project Creator
+cd /d "%~dp0"
+cls
+color 0B
+python new_project.py
+pause
+SHORTCUT
+
+echo "[OK] Da tao / Created: NewPJ.bat"
 
 echo ""
 echo "============================================"
-echo "   SETUP HOÀN TẤT!"
+echo "   SETUP HOAN TAT! / SETUP COMPLETED!"
 echo "============================================"
 echo ""
-echo "Các bước tiếp theo:"
+echo "Cac buoc tiep theo / Next steps:"
 echo ""
-echo "1. Mở thư mục $PROJECTS_PATH"
-echo "2. Chạy: python3 new_project.py"
-echo "3. Mở dự án trong Antigravity IDE"
+echo "1. Chay: python3 new_project.py"
+echo "2. Chon loai du an va tech stack qua giao dien."
+echo "3. Du an se duoc tao tai: $PROJECTS_PATH"
 echo ""
 echo "============================================"
 echo ""

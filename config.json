@@ -1,4 +1,5 @@
 {
-  "MASTER_TEMPLATE_PATH": "D:\\VibeCoding-Template\\.agent",
-  "DEFAULT_PROJECT_PATH": "D:\\\\Projects"
+  "MASTER_TEMPLATE_PATH": null,
+  "bundled_resources_enabled": true,
+  "external_template_optional": true
 }
