@@ -104,8 +104,8 @@ class TestMigrationDetection(MigrationTestBase):
         self.assertFalse(detection.partial_v2_state)
         self.assertFalse(detection.existing_canonical_state)
         self.assertIn(".agent/ directory present", detection.signals)
-        self.assertIn("GEMINI.md present", detection.signals)
-        self.assertIn("CONTEXT.md present", detection.signals)
+        self.assertIn("GEMINI.md present (V1 frontmatter markers)", detection.signals)
+        self.assertIn("CONTEXT.md present (weak signal)", detection.signals)
         self.assertTrue(detection.v1_signals["agent_dir"])
 
     def test_detects_v1_by_gemini_only(self):
@@ -119,7 +119,21 @@ class TestMigrationDetection(MigrationTestBase):
 
         self.assertTrue(detection.is_v1_project)
         self.assertEqual(detection.confidence, "medium")
-        self.assertIn("GEMINI.md present", detection.signals)
+        self.assertIn("GEMINI.md present (generic)", detection.signals)
+        self.assertFalse(detection.already_migrated)
+
+    def test_detects_v1_by_gemini_with_frontmatter(self):
+        dst = Path(tempfile.mkdtemp(prefix="m8-gemini-frontmatter-"))
+        self.addCleanup(shutil.rmtree, dst, ignore_errors=True)
+        (dst / "GEMINI.md").write_text(
+            "---\ntrigger: always_on\n---\n\n# GEMINI.md\n\nV1 frontmatter marker.\n",
+            encoding="utf-8",
+        )
+        detection = detect_v1_project(dst)
+
+        self.assertTrue(detection.is_v1_project)
+        self.assertEqual(detection.confidence, "high")
+        self.assertIn("GEMINI.md present (V1 frontmatter markers)", detection.signals)
         self.assertFalse(detection.already_migrated)
 
     def test_detects_v1_by_context_only(self):
@@ -132,7 +146,8 @@ class TestMigrationDetection(MigrationTestBase):
         detection = detect_v1_project(dst)
 
         self.assertTrue(detection.is_v1_project)
-        self.assertEqual(detection.confidence, "medium")
+        self.assertEqual(detection.confidence, "low")
+        self.assertIn("CONTEXT.md present (weak signal)", detection.signals)
         self.assertFalse(detection.already_migrated)
 
     def test_non_v1_not_detected(self):
@@ -171,6 +186,21 @@ class TestMigrationDetection(MigrationTestBase):
         detect_v1_project(root)
         after = _snapshot(root)
         self.assertEqual(before, after)
+
+    def test_git_worktree_safety(self):
+        """Detection must not crash when .git is a file (linked worktree)."""
+        root = self.copy_fixture("v1_clean")
+        # Simulate a linked worktree: replace .git dir with a gitdir pointer file.
+        git_dir = root / ".git"
+        if git_dir.exists():
+            shutil.rmtree(git_dir)
+        git_dir.write_text("gitdir: ../../.git/worktrees/abc\n", encoding="utf-8")
+        detection = detect_v1_project(root)
+        # Must not crash; detection should still work.
+        self.assertTrue(detection.is_v1_project)
+        # canonical_branch should be None (can't resolve worktree HEAD).
+        analysis = analyze_v1_project(root, detection)
+        self.assertIsNone(analysis.canonical_branch)
 
 
 class TestMigrationConfirmation(MigrationTestBase):
@@ -214,6 +244,23 @@ class TestMigrationConfirmation(MigrationTestBase):
         self.assertFalse(result.confirmed)
         self.assertFalse(result.applied)
         self.assertEqual(result.created_files, [])
+
+    def test_dry_run_overrides_yes_flag(self):
+        """Even when combined with --yes, dry-run must remain zero writes."""
+        root = self.copy_fixture("v1_clean")
+        before = _snapshot(root)
+        detection = detect_v1_project(root)
+        analysis = analyze_v1_project(root, detection)
+        plan = build_migration_plan(root, analysis, dry_run=True)
+        # Simulate CLI passing --yes AND --dry-run: dry-run must win.
+        result = apply_plan(plan, confirmed=True)
+
+        self.assertTrue(plan.dry_run)
+        self.assertTrue(result.dry_run)
+        self.assertFalse(result.applied)
+        self.assertEqual(result.created_files, [])
+        self.assertFalse((root / CANON).exists())
+        self.assertEqual(before, _snapshot(root))
 
 
 class TestMigrationNonDestructive(MigrationTestBase):
@@ -337,6 +384,23 @@ class TestMigrationProvenance(MigrationTestBase):
                 )
                 self.assertEqual(res.provenance.source, "bundled")
 
+    def test_modified_known_resource_not_matched(self):
+        """Same filename/type but different content → not matched, not in lock."""
+        root = self.copy_fixture("v1_clean")
+        # Overwrite the bundled project-planner.md with different content.
+        pp = root / ".agent" / "agents" / "project-planner.md"
+        pp.write_text("# Different content — not the bundled version\n", encoding="utf-8")
+        detection = detect_v1_project(root)
+        analysis = analyze_v1_project(root, detection)
+        plan = build_migration_plan(root, analysis)
+
+        # project-planner agent must NOT be in the lock (content differs).
+        locked = [(r.id, r.type) for r in plan.lock.resources]
+        self.assertNotIn(("project-planner", "agent"), locked)
+        # But it IS reported as an unresolved/modified legacy resource.
+        unresolved_text = "\n".join(plan.unresolved)
+        self.assertIn("project-planner", unresolved_text)
+
 
 class TestMigrationCollisionSafety(MigrationTestBase):
     """Same id, different type must be collision-safe ((type, id) identity)."""
@@ -446,6 +510,40 @@ class TestMigrationFailureSafety(MigrationTestBase):
         self.assertFalse(result.applied)
         self.assertEqual(result.created_files, [])
         self.assertFalse((root / CANON).exists())
+
+    def test_atomic_failure_leaves_no_partial_state(self):
+        """If staging succeeds but publishing fails, no canonical files remain."""
+        root = self.copy_fixture("v1_clean")
+        before = _snapshot(root)
+        detection = detect_v1_project(root)
+        analysis = analyze_v1_project(root, detection)
+        plan = build_migration_plan(root, analysis)
+
+        # Monkeypatch shutil.move to fail on the first file (project.yaml),
+        # simulating a mid-publish failure.
+        import core.migration as mig
+
+        original_move = shutil.move
+
+        def failing_move(src, dst, *args, **kwargs):
+            if Path(dst).name == PROJECT_YAML:
+                raise OSError("simulated disk full on project.yaml")
+            return original_move(src, dst, *args, **kwargs)
+
+        shutil.move = failing_move
+        try:
+            result = apply_plan(plan, confirmed=True)
+        finally:
+            shutil.move = original_move
+
+        self.assertFalse(result.applied)
+        self.assertTrue(result.errors)
+        # No canonical files may exist after a failed apply.
+        self.assertFalse((root / CANON / PROJECT_YAML).exists())
+        self.assertFalse((root / CANON / STATE_YAML).exists())
+        self.assertFalse((root / CANON / RESOURCES_LOCK).exists())
+        # Legacy files must be untouched.
+        self.assertEqual(before, _snapshot(root))
 
 
 class TestMigrationOffline(MigrationTestBase):

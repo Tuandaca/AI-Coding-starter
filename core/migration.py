@@ -40,7 +40,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import re
 import shutil
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -52,6 +55,7 @@ from core.spec import (
     PROJECT_YAML,
     SCHEMA_VERSION,
     build_project_spec,
+    read_project_spec,
     write_project_spec,
 )
 from core.state import (
@@ -59,6 +63,8 @@ from core.state import (
     RESOURCES_LOCK,
     build_initial_state,
     build_resources_lock,
+    read_resources_lock,
+    read_state,
     write_resources_lock,
     write_state,
 )
@@ -73,6 +79,13 @@ MIGRATION_TOOL_ID = "ai-coding-starter-migrator"
 V1_SIGNAL_AGENT_DIR = ".agent"
 V1_SIGNAL_GEMINI_MD = "GEMINI.md"
 V1_SIGNAL_CONTEXT_MD = "CONTEXT.md"
+
+# V1 GEMINI.md frontmatter marker that distinguishes starter-generated
+# GEMINI.md files from generic, unrelated files with the same name.
+V1_GEMINI_FRONTMARKER = "trigger: always_on"
+
+# Absolute developer path pattern (Windows drive letter or POSIX absolute).
+ABSOLUTE_PATH_RE = re.compile(r"^[A-Za-z]:[\\/]|^/")
 
 # Legacy resource directory names under .agent/ and their canonical resource type.
 AGENT_DIR_TYPE_MAP = {
@@ -219,8 +232,31 @@ def _looks_like_secret(text: str) -> bool:
 
 
 def _git_branch(project_root: Path) -> Optional[str]:
-    """Read the current git branch, or None if not a git repo / unreadable."""
-    head_file = project_root / ".git" / "HEAD"
+    """Read the current git branch, or None if not a git repo / unreadable.
+
+    Handles both plain ``.git/`` directories and linked worktrees where
+    ``.git`` is a file (e.g. ``gitdir: <path>``). Never mutates any git state.
+    """
+    git_path = project_root / ".git"
+    try:
+        if git_path.is_file():
+            # Linked worktree: .git is a pointer file "gitdir: <path>".
+            text = _read_text(git_path) or ""
+            if text.startswith("gitdir:"):
+                target = text[len("gitdir:"):].strip()
+                target_path = Path(target)
+                if not target_path.is_absolute():
+                    target_path = (project_root / target_path).resolve()
+                head_file = target_path / "HEAD"
+            else:
+                return None
+        elif git_path.is_dir():
+            head_file = git_path / "HEAD"
+        else:
+            return None
+    except OSError:
+        return None
+
     if not head_file.exists():
         return None
     text = _read_text(head_file)
@@ -228,9 +264,9 @@ def _git_branch(project_root: Path) -> Optional[str]:
         return None
     text = text.strip()
     if text.startswith("ref: "):
-        ref = text[len("ref: ") :]
+        ref = text[len("ref: "):]
         if ref.startswith("refs/heads/"):
-            return ref[len("refs/heads/") :]
+            return ref[len("refs/heads/"):]
         return ref
     return None  # detached HEAD -> no branch name
 
@@ -266,14 +302,26 @@ def detect_v1_project(project_root: Path | str) -> DetectionResult:
     }
 
     if agent_dir_exists:
-        signals.append(f".agent/ directory present")
+        signals.append(".agent/ directory present")
         reasons.append("V1 projects store agents/skills/workflows under .agent/")
     if gemini_exists:
-        signals.append("GEMINI.md present")
-        reasons.append("GEMINI.md is a V1 legacy instruction file")
+        # GEMINI.md: high only if it carries V1 starter frontmatter markers,
+        # otherwise medium (a generic GEMINI.md could be unrelated).
+        gemini_text = _read_text(gemini_md) or ""
+        has_v1_marker = V1_GEMINI_FRONTMARKER in gemini_text
+        if has_v1_marker:
+            signals.append("GEMINI.md present (V1 frontmatter markers)")
+            reasons.append("GEMINI.md with V1 starter frontmatter detected")
+        else:
+            signals.append("GEMINI.md present (generic)")
+            reasons.append(
+                "GEMINI.md present but no V1 starter frontmatter markers"
+            )
     if context_exists:
-        signals.append("CONTEXT.md present")
-        reasons.append("CONTEXT.md is a V1 legacy session-memory file")
+        signals.append("CONTEXT.md present (weak signal)")
+        reasons.append(
+            "CONTEXT.md present alone — weak V1 signal, confirmation required"
+        )
 
     if project_yaml_exists:
         # Already migrated to V2 canonical state.
@@ -293,8 +341,23 @@ def detect_v1_project(project_root: Path | str) -> DetectionResult:
         reasons.append(
             ".ai-coding-starter/ exists without project.yaml (partial V2 state)"
         )
-    elif agent_dir_exists or gemini_exists or context_exists:
-        confidence = "high" if agent_dir_exists else "medium"
+    elif agent_dir_exists:
+        # .agent/ is a strong, V1-specific structural signal.
+        confidence = "high"
+        is_v1_project = True
+        already_migrated = False
+        partial_v2_state = False
+    elif gemini_exists:
+        confidence = "high" if any(
+            "V1 frontmatter markers" in s for s in signals
+        ) else "medium"
+        is_v1_project = True
+        already_migrated = False
+        partial_v2_state = False
+    elif context_exists:
+        # CONTEXT.md alone is a weak signal: many non-starter projects have
+        # a CONTEXT.md for unrelated reasons. Do not overstate certainty.
+        confidence = "low"
         is_v1_project = True
         already_migrated = False
         partial_v2_state = False
@@ -425,12 +488,16 @@ def _discover_legacy_resources(
                     legacy_hash is not None
                     and legacy_hash == bundled_hash
                 )
+            # A resource is "matched" only when content hash equality is
+            # verified. Same filename/type with different content is NOT a
+            # match — filename alone is insufficient for provenance.
+            matched = content_hash_match
             discovered.append(
                 {
                     "id": rid,
                     "type": rtype,
                     "legacy_path": legacy_path,
-                    "matched": bundled_path is not None,
+                    "matched": matched,
                     "bundled_path": (
                         bundled_path.relative_to(Path.cwd()).as_posix()
                         if bundled_path is not None
@@ -500,6 +567,8 @@ def _infer_state_from_context(text: Optional[str]) -> tuple[str, str, list[str]]
             line = text[idx + len(marker) :]
             line = line.split("\n")[0].strip(" -:*")
             if line:
+                # Never persist absolute developer paths into canonical state.
+                line = ABSOLUTE_PATH_RE.sub("<path>", line)
                 focus = line[:200]
             break
     if not focus:
@@ -820,34 +889,102 @@ def apply_plan(
     protected = [V1_SIGNAL_AGENT_DIR, V1_SIGNAL_GEMINI_MD, V1_SIGNAL_CONTEXT_MD]
     before_snapshot = _snapshot_files(plan.project_root, protected)
 
-    if not plan.dry_run:
-        try:
-            # Write to project root; each writer joins CANONICAL_STATE_DIR itself.
-            write_project_spec(plan.project_root, plan.spec)
-            created_files.append(f"{CANONICAL_STATE_DIR}/{PROJECT_YAML}")
-            # Write state.yaml.
-            write_state(plan.project_root, plan.state)
-            created_files.append(f"{CANONICAL_STATE_DIR}/{STATE_YAML}")
-            # Write resources.lock.
-            write_resources_lock(plan.project_root, plan.lock)
-            created_files.append(f"{CANONICAL_STATE_DIR}/{RESOURCES_LOCK}")
-        except OSError as exc:
-            errors.append(f"failed to write canonical state: {exc}")
-            return MigrationResult(
-                detected=True,
-                already_migrated=False,
-                confirmed=True,
-                applied=False,
-                created_files=created_files,
-                preserved_files=preserved_files,
-                inferred_fields=plan.inference,
-                unresolved_fields=plan.unresolved,
-                warnings=list(plan.warnings),
-                dry_run=plan.dry_run,
-                errors=errors,
+    if plan.dry_run:
+        return MigrationResult(
+            detected=True,
+            already_migrated=False,
+            confirmed=True,
+            applied=False,
+            created_files=[],
+            preserved_files=preserved_files,
+            inferred_fields=plan.inference,
+            unresolved_fields=plan.unresolved,
+            warnings=list(plan.warnings),
+            dry_run=True,
+            errors=[],
         )
 
-    # Verify protected files unchanged.
+    # --- ATOMIC APPLY ---------------------------------------------------
+    # Stage all canonical files in a temp staging dir under the project
+    # root, validate each write by reading it back, then move them into
+    # .ai-coding-starter/ only after every file is proven good. A failure
+    # at any stage cleans up staging and leaves the target untouched.
+    staging_dir = None
+    try:
+        staging_dir = Path(
+            tempfile.mkdtemp(prefix=".ai-coding-starter-staging-", dir=plan.project_root)
+        )
+
+        # 1. Write all files to staging.
+        write_project_spec(staging_dir, plan.spec)
+        write_state(staging_dir, plan.state)
+        write_resources_lock(staging_dir, plan.lock)
+
+        # 2. Validate by reading each back.
+        read_project_spec(staging_dir / CANONICAL_STATE_DIR / PROJECT_YAML)
+        read_state(staging_dir / CANONICAL_STATE_DIR / STATE_YAML)
+        read_resources_lock(staging_dir / CANONICAL_STATE_DIR / RESOURCES_LOCK)
+
+        # 3. Ensure destination dir exists.
+        state_dir.mkdir(parents=True, exist_ok=True)
+
+        # 4. Move each staged file into place. If any move fails, clean up
+        #    what was already moved and report error (partial state, but
+        #    we attempt to leave nothing behind).
+        moved: list[Path] = []
+        for rel in plan.will_create:
+            src = staging_dir / rel
+            dst = plan.project_root / rel
+            try:
+                shutil.move(str(src), str(dst))
+                moved.append(dst)
+                created_files.append(rel)
+            except OSError as exc:
+                # Roll back any files already moved in this batch.
+                for already_moved in moved:
+                    try:
+                        already_moved.unlink()
+                    except OSError:
+                        pass
+                errors.append(f"failed to publish {rel}: {exc}")
+                return MigrationResult(
+                    detected=True,
+                    already_migrated=False,
+                    confirmed=True,
+                    applied=False,
+                    created_files=[],
+                    preserved_files=preserved_files,
+                    inferred_fields=plan.inference,
+                    unresolved_fields=plan.unresolved,
+                    warnings=list(plan.warnings),
+                    dry_run=False,
+                    errors=errors,
+                )
+
+    except OSError as exc:
+        errors.append(f"failed to stage canonical state: {exc}")
+        return MigrationResult(
+            detected=True,
+            already_migrated=False,
+            confirmed=True,
+            applied=False,
+            created_files=[],
+            preserved_files=preserved_files,
+            inferred_fields=plan.inference,
+            unresolved_fields=plan.unresolved,
+            warnings=list(plan.warnings),
+            dry_run=False,
+            errors=errors,
+        )
+    finally:
+        # Always clean up staging dir if it still exists.
+        if staging_dir is not None and staging_dir.exists():
+            try:
+                shutil.rmtree(staging_dir, ignore_errors=True)
+            except OSError:
+                pass
+
+    # Verify protected legacy files unchanged.
     for p in protected:
         after = _file_hash(plan.project_root / p)
         if before_snapshot.get(p) != after:
