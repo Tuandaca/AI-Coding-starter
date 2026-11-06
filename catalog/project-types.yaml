@@ -1,0 +1,149 @@
+{
+  "schema_version": "1.0.0",
+  "project_types": [
+    {
+      "id": "portfolio",
+      "name": "Portfolio",
+      "description": "Personal portfolio or showcase website.",
+      "default_capabilities": [],
+      "recommended_capabilities": ["search", "i18n", "accessibility"],
+      "tags": ["web", "static", "personal"],
+      "example_bundles": ["react-static", "nextjs-vercel", "vue-lite"]
+    },
+    {
+      "id": "landing-page",
+      "name": "Landing Page",
+      "description": "Single-page marketing or campaign site.",
+      "default_capabilities": [],
+      "recommended_capabilities": ["search", "i18n", "analytics"],
+      "tags": ["web", "marketing", "static"],
+      "example_bundles": ["react-static", "nextjs-vercel", "vue-lite"]
+    },
+    {
+      "id": "business-website",
+      "name": "Business Website",
+      "description": "Multi-page company or organisation website.",
+      "default_capabilities": ["email", "search"],
+      "recommended_capabilities": ["i18n", "accessibility", "analytics"],
+      "tags": ["web", "business", "cms"],
+      "example_bundles": ["react-static", "nextjs-dotnet-postgres", "dotnet-postgres"]
+    },
+    {
+      "id": "blog-content",
+      "name": "Blog / Content Site",
+      "description": "Content-focused site with articles and publishing.",
+      "default_capabilities": ["search"],
+      "recommended_capabilities": ["i18n", "analytics", "accessibility"],
+      "tags": ["web", "content", "publishing"],
+      "example_bundles": ["react-static", "nextjs-vercel"]
+    },
+    {
+      "id": "e-commerce",
+      "name": "E-commerce",
+      "description": "Online store with products, cart and checkout.",
+      "default_capabilities": ["authentication", "authorization", "payments", "email"],
+      "recommended_capabilities": ["subscriptions", "search", "notifications", "cache", "analytics"],
+      "tags": ["web", "commerce", "transactions"],
+      "example_bundles": ["nextjs-supabase", "nextjs-dotnet-postgres"]
+    },
+    {
+      "id": "saas",
+      "name": "SaaS Platform",
+      "description": "Subscription-based web application with multi-tenancy.",
+      "default_capabilities": ["authentication", "authorization", "payments", "subscriptions", "email"],
+      "recommended_capabilities": ["multi-tenancy", "cache", "analytics", "notifications", "file-upload"],
+      "tags": ["web", "subscription", "b2b"],
+      "example_bundles": ["nextjs-supabase", "nextjs-dotnet-postgres", "fastapi-postgres", "nestjs-postgres"]
+    },
+    {
+      "id": "fullstack-application",
+      "name": "Full-Stack Application",
+      "description": "Complete web application with frontend, API and database.",
+      "default_capabilities": ["authentication", "authorization", "email"],
+      "recommended_capabilities": ["payments", "cache", "search", "realtime", "file-upload"],
+      "tags": ["web", "fullstack", "crud"],
+      "example_bundles": ["nextjs-supabase", "nextjs-dotnet-postgres"]
+    },
+    {
+      "id": "dashboard",
+      "name": "Dashboard",
+      "description": "Data dashboard or admin interface.",
+      "default_capabilities": ["authentication", "authorization"],
+      "recommended_capabilities": ["analytics", "cache", "realtime", "email"],
+      "tags": ["web", "admin", "analytics"],
+      "example_bundles": ["nextjs-dotnet-postgres", "dotnet-postgres", "nestjs-postgres"]
+    },
+    {
+      "id": "backend-api",
+      "name": "Backend API",
+      "description": "Backend-only API service with no user-facing frontend.",
+      "default_capabilities": [],
+      "recommended_capabilities": ["cache", "background-jobs", "queue", "analytics", "search"],
+      "tags": ["backend", "api", "services"],
+      "example_bundles": ["fastapi-postgres", "dotnet-postgres", "nestjs-postgres"]
+    },
+    {
+      "id": "mobile-application",
+      "name": "Mobile Application",
+      "description": "Cross-platform mobile app backed by cloud services.",
+      "default_capabilities": ["authentication"],
+      "recommended_capabilities": ["notifications", "cache"],
+      "tags": ["mobile", "cross-platform"],
+      "example_bundles": ["expo-supabase-mobile"]
+    },
+    {
+      "id": "ai-rag",
+      "name": "AI RAG Application",
+      "description": "Retrieval-augmented generation application over documents.",
+      "default_capabilities": ["ai", "rag"],
+      "recommended_capabilities": ["vector-search", "cache", "background-jobs", "queue", "search"],
+      "tags": ["ai", "rag", "search"],
+      "example_bundles": ["fastapi-postgres", "ai-rag-python"]
+    },
+    {
+      "id": "ai-agent",
+      "name": "AI Agent Application",
+      "description": "Autonomous or semi-autonomous AI agent application.",
+      "default_capabilities": ["ai"],
+      "recommended_capabilities": ["rag", "vector-search", "background-jobs", "queue", "cache"],
+      "tags": ["ai", "agents", "automation"],
+      "example_bundles": ["fastapi-postgres", "ai-rag-python"]
+    },
+    {
+      "id": "realtime-application",
+      "name": "Realtime Application",
+      "description": "Application with live updates over WebSockets or similar.",
+      "default_capabilities": ["realtime", "authentication"],
+      "recommended_capabilities": ["cache", "notifications", "search"],
+      "tags": ["realtime", "websocket"],
+      "example_bundles": ["nextjs-supabase"]
+    },
+    {
+      "id": "desktop-application",
+      "name": "Desktop Application",
+      "description": "Locally installed desktop application.",
+      "default_capabilities": [],
+      "recommended_capabilities": ["analytics", "notifications", "accessibility"],
+      "tags": ["desktop", "local"],
+      "example_bundles": ["tauri-react-sqlite"]
+    },
+    {
+      "id": "other",
+      "name": "Other",
+      "description": "Project type not covered by the standard catalog.",
+      "default_capabilities": [],
+      "recommended_capabilities": [],
+      "tags": ["custom"],
+      "example_bundles": []
+    },
+    {
+      "id": "not-decided",
+      "name": "Not Decided",
+      "description": "Project type has not been decided yet.",
+      "default_capabilities": [],
+      "recommended_capabilities": [],
+      "tags": ["undecided"],
+      "example_bundles": []
+    }
+  ]
+}

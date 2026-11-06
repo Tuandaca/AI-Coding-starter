@@ -1,0 +1,217 @@
+{
+  "schema_version": "1.0.0",
+  "stack_bundles": [
+    {
+      "id": "nextjs-supabase",
+      "name": "Next.js + Supabase",
+      "description": "Full-stack React with Supabase BaaS — fastest path to an authenticated, realtime SaaS.",
+      "project_types": ["saas", "e-commerce", "fullstack-application", "realtime-application"],
+      "capabilities": ["authentication", "authorization", "realtime", "email", "file-upload"],
+      "technologies": {
+        "frontend": "nextjs",
+        "backend": "nextjs",
+        "database": "postgresql",
+        "orm": "supabase-client",
+        "auth": "supabase-auth",
+        "hosting": "vercel",
+        "styling": "tailwindcss"
+      },
+      "profile": "fastest-mvp",
+      "constraints": ["Supabase vendor lock-in for auth/realtime", "Vercel recommended for hosting"],
+      "tradeoffs": ["Less control over auth schema", "Realtime tied to Supabase"],
+      "incompatible_with": ["nextjs-dotnet-postgres"]
+    },
+    {
+      "id": "expo-supabase-mobile",
+      "name": "React Native + Supabase",
+      "description": "Cross-platform mobile app with Expo/React Native and a Supabase backend.",
+      "project_types": ["mobile-application"],
+      "capabilities": ["authentication", "authorization", "realtime", "notifications", "file-upload"],
+      "technologies": {
+        "frontend": "react-native",
+        "backend": "supabase",
+        "database": "postgresql",
+        "orm": "supabase-client",
+        "auth": "supabase-auth",
+        "styling": "native-styles"
+      },
+      "profile": "fastest-mvp",
+      "constraints": ["Requires Expo/React Native toolchain", "Supabase vendor lock-in for auth/realtime"],
+      "tradeoffs": ["Shared TypeScript skills with web", "Native build and release overhead"],
+      "incompatible_with": []
+    },
+    {
+      "id": "nextjs-dotnet-postgres",
+      "name": "Next.js + ASP.NET Core + PostgreSQL",
+      "description": "Next.js frontend with an ASP.NET Core backend and PostgreSQL — coherent, type-safe, balanced.",
+      "project_types": ["saas", "e-commerce", "fullstack-application", "dashboard", "business-website"],
+      "capabilities": ["authentication", "authorization", "payments", "subscriptions", "email", "cache"],
+      "technologies": {
+        "frontend": "nextjs",
+        "backend": "aspnet-core",
+        "database": "postgresql",
+        "orm": "ef-core",
+        "auth": "aspnet-identity",
+        "hosting": "railway",
+        "styling": "tailwindcss"
+      },
+      "profile": "balanced",
+      "constraints": ["Requires .NET runtime", "Two-tier deployment"],
+      "tradeoffs": ["Strong type safety", "More operational complexity than serverless"],
+      "incompatible_with": ["nextjs-supabase"]
+    },
+    {
+      "id": "fastapi-postgres",
+      "name": "FastAPI + PostgreSQL",
+      "description": "Python backend with PostgreSQL — type-safe, performant, cloud-agnostic backend API.",
+      "project_types": ["backend-api", "ai-rag", "ai-agent", "saas"],
+      "capabilities": ["cache", "background-jobs"],
+      "technologies": {
+        "frontend": "none",
+        "backend": "fastapi",
+        "database": "postgresql",
+        "orm": "sqlalchemy",
+        "cache": "redis",
+        "queue": "celery",
+        "hosting": "railway",
+        "testing": "pytest"
+      },
+      "profile": "balanced",
+      "constraints": ["Requires Python runtime", "Separate frontend needed for web apps"],
+      "tradeoffs": ["No built-in auth", "Manual frontend integration"],
+      "incompatible_with": ["nextjs-supabase", "dotnet-postgres"]
+    },
+    {
+      "id": "ai-rag-python",
+      "name": "FastAPI + PostgreSQL + pgvector (RAG)",
+      "description": "Python RAG stack with FastAPI, PostgreSQL and pgvector for semantic search.",
+      "project_types": ["ai-rag", "ai-agent"],
+      "capabilities": ["ai", "rag", "vector-search", "cache", "background-jobs", "queue"],
+      "technologies": {
+        "frontend": "none",
+        "backend": "fastapi",
+        "database": "postgresql",
+        "orm": "sqlalchemy",
+        "vector_database": "pgvector",
+        "cache": "redis",
+        "queue": "celery",
+        "hosting": "railway"
+      },
+      "profile": "balanced",
+      "constraints": ["Requires Python runtime", "Vector store required for RAG"],
+      "tradeoffs": ["Higher operational complexity", "Model and API costs"],
+      "incompatible_with": []
+    },
+    {
+      "id": "react-static",
+      "name": "React Static",
+      "description": "Static React site with no backend or database — ideal for portfolios and marketing sites.",
+      "project_types": ["portfolio", "landing-page", "business-website", "blog-content"],
+      "capabilities": ["search", "i18n"],
+      "technologies": {
+        "frontend": "react",
+        "backend": "none",
+        "database": "none",
+        "hosting": "vercel",
+        "styling": "tailwindcss"
+      },
+      "profile": "minimal",
+      "constraints": ["No backend or database", "Static hosting only"],
+      "tradeoffs": ["Limited interactivity", "No server-side logic"],
+      "incompatible_with": []
+    },
+    {
+      "id": "dotnet-postgres",
+      "name": "ASP.NET Core + PostgreSQL",
+      "description": "ASP.NET Core backend API with PostgreSQL — scalable backend for APIs and dashboards.",
+      "project_types": ["backend-api", "dashboard", "business-website"],
+      "capabilities": ["cache", "background-jobs"],
+      "technologies": {
+        "frontend": "none",
+        "backend": "aspnet-core",
+        "database": "postgresql",
+        "orm": "ef-core",
+        "cache": "redis",
+        "hosting": "aws",
+        "testing": "xunit"
+      },
+      "profile": "scalable",
+      "constraints": ["Requires .NET runtime", "Windows/Linux hosting"],
+      "tradeoffs": ["Higher operational complexity", "Strong enterprise ecosystem"],
+      "incompatible_with": []
+    },
+    {
+      "id": "tauri-react-sqlite",
+      "name": "React + Tauri + SQLite",
+      "description": "Cross-platform desktop application with a React UI, Tauri shell and local SQLite storage.",
+      "project_types": ["desktop-application"],
+      "capabilities": ["notifications"],
+      "technologies": {
+        "frontend": "react",
+        "backend": "tauri",
+        "database": "sqlite",
+        "styling": "tailwindcss"
+      },
+      "profile": "balanced",
+      "constraints": ["Requires Rust toolchain", "OS-specific packaging and signing"],
+      "tradeoffs": ["Small bundle size and native performance", "Rust backend skills required"],
+      "incompatible_with": []
+    },
+    {
+      "id": "nestjs-postgres",
+      "name": "NestJS + PostgreSQL",
+      "description": "NestJS backend with PostgreSQL — opinionated TypeScript backend for APIs and SaaS.",
+      "project_types": ["backend-api", "saas", "dashboard"],
+      "capabilities": ["cache", "background-jobs", "queue"],
+      "technologies": {
+        "frontend": "none",
+        "backend": "nestjs",
+        "database": "postgresql",
+        "orm": "prisma",
+        "cache": "redis",
+        "queue": "rabbitmq",
+        "hosting": "railway"
+      },
+      "profile": "balanced",
+      "constraints": ["Requires Node.js runtime", "TypeScript required"],
+      "tradeoffs": ["Opinionated structure", "Learning curve"],
+      "incompatible_with": []
+    },
+    {
+      "id": "nextjs-vercel",
+      "name": "Next.js on Vercel",
+      "description": "Next.js static site on Vercel — minimal frontend with no backend or database.",
+      "project_types": ["portfolio", "landing-page", "blog-content"],
+      "capabilities": [],
+      "technologies": {
+        "frontend": "nextjs",
+        "backend": "none",
+        "database": "none",
+        "hosting": "vercel",
+        "styling": "tailwindcss"
+      },
+      "profile": "minimal",
+      "constraints": ["No backend or database", "Vercel serverless functions only"],
+      "tradeoffs": ["Vendor lock-in on Vercel", "Limited backend capabilities"],
+      "incompatible_with": []
+    },
+    {
+      "id": "vue-lite",
+      "name": "Vue Static",
+      "description": "Lightweight Vue static site — minimal frontend with no backend or database.",
+      "project_types": ["portfolio", "landing-page"],
+      "capabilities": [],
+      "technologies": {
+        "frontend": "vue",
+        "backend": "none",
+        "database": "none",
+        "hosting": "netlify",
+        "styling": "css"
+      },
+      "profile": "minimal",
+      "constraints": ["No backend or database", "Static hosting only"],
+      "tradeoffs": ["Smaller ecosystem", "Fewer hiring options"],
+      "incompatible_with": []
+    }
+  ]
+}

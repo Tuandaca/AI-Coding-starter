@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0.0",
+  "rules": [
+    {
+      "type": "technology-technology",
+      "subject": "nextjs",
+      "target": "vue",
+      "severity": "error",
+      "reason": "Cannot have two primary frontend frameworks in one stack.",
+      "condition": { "context": ["frontend"] }
+    },
+    {
+      "type": "bundle-bundle",
+      "subject": "nextjs-supabase",
+      "target": "nextjs-dotnet-postgres",
+      "severity": "error",
+      "reason": "Both bundles provide a full-stack Next.js solution with different backends.",
+      "condition": {}
+    },
+    {
+      "type": "technology-capability",
+      "subject": "nextjs",
+      "target": "realtime",
+      "severity": "warning",
+      "reason": "Next.js realtime requires additional setup (Supabase, Pusher, or a custom WebSocket server).",
+      "condition": {}
+    }
+  ]
+}

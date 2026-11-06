@@ -24,6 +24,12 @@ from pathlib import Path
 
 import json
 
+# M3: catalog + resolver integration (new authoritative selection flow).
+# These are imported (not executed) at module load so the legacy functions
+# below remain available for backward-compatible characterization tests.
+from core.catalog_loader import load_catalog, DEFAULT_CATALOG_DIR
+from core.resolver import resolve_top, NOT_DECIDED
+
 CONFIG_FILE = Path(__file__).parent / "config.json"
 # Bundled resources are the DEFAULT source
 BUNDLED_RESOURCE_ROOT = Path(__file__).parent / "resources"
@@ -1170,6 +1176,10 @@ def generate_gemini_md(dest_base, project_name, selected_types, merged_req, tech
     """Generate customized GEMINI.md based on project types and tech stack."""
 
     type_names = [PROJECT_TYPES[t]["name"] for t in selected_types]
+    if not type_names and tech_stack:
+        project_type_name = tech_stack.get("project_type")
+        if project_type_name:
+            type_names = [project_type_name]
     focus_areas = " | ".join(merged_req["focus"])
 
     agent_list = "\n".join([f"- `{a.replace('.md', '')}`" for a in merged_req["agents"]])
@@ -1314,6 +1324,10 @@ def generate_context_md(dest_base, project_name, selected_types, tech_stack=None
     from datetime import datetime
 
     type_names = [PROJECT_TYPES[t]["name"] for t in selected_types]
+    if not type_names and tech_stack:
+        project_type_name = tech_stack.get("project_type")
+        if project_type_name:
+            type_names = [project_type_name]
     today = datetime.now().strftime("%Y-%m-%d")
 
     # Tech stack info for context
@@ -1433,6 +1447,194 @@ def format_size(bytes_count):
     return f"{bytes_count:.1f} TB"
 
 # ============================================
+# M3: CATALOG-BASED WIZARD FLOW
+# ============================================
+# New authoritative selection flow:
+#   project type -> capabilities -> resolver -> ONE coherent stack bundle
+# These functions replace select_multiple/select_tech_stack/merge_tech_stacks
+# in the normal path. The legacy functions are retained (deprecated) solely
+# for backward-compatible characterization tests.
+
+TECH_DISPLAY_NAMES = {
+    "nextjs": "Next.js",
+    "react": "React",
+    "react-native": "React Native",
+    "vue": "Vue",
+    "aspnet-core": "ASP.NET Core",
+    "fastapi": "FastAPI",
+    "nestjs": "NestJS",
+    "tauri": "Tauri",
+    "postgresql": "PostgreSQL",
+    "sqlite": "SQLite",
+    "supabase-client": "Supabase Client",
+    "supabase-auth": "Supabase Auth",
+    "aspnet-identity": "ASP.NET Identity",
+    "ef-core": "EF Core",
+    "sqlalchemy": "SQLAlchemy",
+    "prisma": "Prisma",
+    "redis": "Redis",
+    "celery": "Celery",
+    "rabbitmq": "RabbitMQ",
+    "pgvector": "pgvector",
+    "vercel": "Vercel",
+    "railway": "Railway",
+    "aws": "AWS",
+    "netlify": "Netlify",
+    "tailwindcss": "TailwindCSS",
+    "css": "CSS",
+    "pytest": "Pytest",
+    "xunit": "xUnit",
+    "none": "None",
+}
+
+
+def display_id(value: str) -> str:
+    """Human-readable display name for a technology ID (UI only, not identity)."""
+    return TECH_DISPLAY_NAMES.get(value, value.replace("-", " ").title())
+
+
+def load_starter_catalog():
+    """Load the M3 catalog offline and deterministically."""
+    return load_catalog(DEFAULT_CATALOG_DIR)
+
+
+def select_project_type(catalog):
+    """Step 1: choose a project type from the catalog."""
+    types = sorted(catalog.project_types.values(), key=lambda pt: str(pt.id))
+    print("\n" + "=" * 60)
+    print("  📦 BƯỚC 1: LOẠI DỰ ÁN (Project Type)")
+    print("=" * 60)
+    for i, pt in enumerate(types, 1):
+        marker = "  ⚠️  (chưa quyết định)" if str(pt.id) == NOT_DECIDED else ""
+        print(f"    [{i}] {pt.name}{marker}")
+        print(f"        {pt.description}")
+    while True:
+        selection = get_input("Chọn loại dự án (hoặc Enter để chọn 'Not Decided')", "")
+        if not selection:
+            return NOT_DECIDED
+        try:
+            idx = int(selection.strip()) - 1
+            if 0 <= idx < len(types):
+                return str(types[idx].id)
+        except ValueError:
+            pass
+        print_error("Lựa chọn không hợp lệ!")
+
+
+def select_capabilities(catalog, project_type_id):
+    """Step 2: choose relevant capabilities for the project type.
+
+    Progressive disclosure: only capabilities relevant to the selected project
+    type are shown, defaults are preselected, and skipping is allowed.
+    """
+    pt = catalog.project_types[project_type_id]
+    relevant = sorted({
+        str(c) for c in (
+            list(pt.default_capabilities) + list(pt.recommended_capabilities)
+        )
+    })
+    defaults = {str(c) for c in pt.default_capabilities}
+    print("\n" + "=" * 60)
+    print("  🎯 BƯỚC 2: KHẢ NĂNG (Capabilities)")
+    print("=" * 60)
+    print(f"  Loại dự án: {pt.name}")
+    print("  Mặc định đã được chọn (bổ sung hoặc bỏ chọn bằng số):")
+    for i, cap_id in enumerate(relevant, 1):
+        cap = catalog.capabilities[cap_id]
+        marked = "✅" if cap_id in defaults else "⭕"
+        print(f"    [{i}] {marked} {cap.name} — {cap.description}")
+    selection = get_input(
+        "Chọn năng lực bổ sung (số, cách nhau bởi dấu phẩy; -số để bỏ chọn) "
+        "hoặc Enter để dùng mặc định: ",
+        "",
+    )
+    if not selection:
+        return sorted(defaults)
+    chosen = set(defaults)
+    try:
+        for raw in selection.split(","):
+            token = raw.strip()
+            if not token:
+                continue
+            remove = token.startswith("-")
+            if remove:
+                token = token[1:].strip()
+            idx = int(token) - 1
+            if not 0 <= idx < len(relevant):
+                raise ValueError(token)
+            cap_id = relevant[idx]
+            if remove:
+                chosen.discard(cap_id)
+            else:
+                chosen.add(cap_id)
+        return sorted(chosen)
+    except ValueError:
+        print_error("Lựa chọn không hợp lệ, dùng mặc định.")
+        return sorted(defaults)
+
+
+def resolve_stacks(catalog, project_type_id, cap_ids):
+    """Step 3: resolve compatible, ranked stack bundles (offline, deterministic)."""
+    return resolve_top(project_type_id, cap_ids, catalog, limit=5)
+
+
+def select_bundle(result, catalog):
+    """Step 4: choose ONE bundle from the ranked recommendations."""
+    print("\n" + "=" * 60)
+    print("  🗄️  BƯỚC 3: STACK BUNDLE (chọn MỘT bundle duy nhất)")
+    print("=" * 60)
+    if not result.ok:
+        print_error(result.rejection_reason or "Không thể giải quyết stack.")
+        return None
+    for i, rec in enumerate(result.bundles, 1):
+        print(f"    [{i}] {rec.name} ({rec.profile})")
+        print(f"        {rec.description}")
+        if rec.matched_capabilities:
+            print(f"        ✅ Khả năng khớp: {', '.join(rec.matched_capabilities)}")
+        if rec.missing_capabilities:
+            print(f"        ⚠️  Chưa có: {', '.join(rec.missing_capabilities)}")
+    while True:
+        selection = get_input(
+            "Chọn một bundle (số) hoặc Enter để chọn bundle đầu tiên: ", ""
+        )
+        if not selection:
+            return result.bundles[0].bundle_id if result.bundles else None
+        try:
+            idx = int(selection.strip()) - 1
+            if 0 <= idx < len(result.bundles):
+                return result.bundles[idx].bundle_id
+        except ValueError:
+            pass
+        print_error("Lựa chọn không hợp lệ!")
+
+
+def bundle_to_tech_stack(bundle, project_type_name=None):
+    """Convert a StackBundle into the legacy tech_stack dict shape."""
+    techs = bundle.technologies
+
+    def show(role: str) -> str:
+        val = str(techs.get(role, "none"))
+        return "None" if val == "none" else display_id(val)
+
+    stack = {
+        "type": "bundle",
+        "bundle_id": str(bundle.id),
+        "bundle_name": bundle.name,
+        "frontend": show("frontend"),
+        "backend": show("backend"),
+        "database": show("database"),
+        "orm": show("orm") if "orm" in techs else "None",
+        "cache": show("cache") if "cache" in techs else "None",
+        "hosting": show("hosting") if "hosting" in techs else "None",
+        "styling": show("styling") if "styling" in techs else "None",
+        "extras": [str(c) for c in bundle.capabilities],
+    }
+    if project_type_name is not None:
+        stack["project_type"] = project_type_name
+    return stack
+
+
+# ============================================
 # MAIN WIZARD
 # ============================================
 
@@ -1490,11 +1692,24 @@ def main():
             sys.exit(0)
         shutil.rmtree(agent_path)
 
-    # Step 4: Select project types
-    selected_types = select_multiple(PROJECT_TYPES, MAX_TYPES)
-
-    # Step 5: Select tech stack
-    tech_stack = select_tech_stack(selected_types)
+    # Step 4 (M3): Project type -> capabilities -> resolver -> ONE bundle.
+    # The catalog + resolver is authoritative; legacy TECH_PRESETS is NOT used.
+    catalog = load_starter_catalog()
+    project_type_id = select_project_type(catalog)
+    selected_cap_ids = select_capabilities(catalog, project_type_id)
+    resolution = resolve_stacks(catalog, project_type_id, selected_cap_ids)
+    bundle_id = select_bundle(resolution, catalog)
+    if bundle_id is None:
+        print_info("Đã hủy.")
+        sys.exit(0)
+    bundle = catalog.stack_bundles[bundle_id]
+    project_type_display = catalog.project_types[project_type_id].name
+    tech_stack = bundle_to_tech_stack(bundle, project_type_display)
+    # M3 catalog project types are not in the legacy PROJECT_TYPES map, so the
+    # generator downstream receives an empty type list to avoid KeyError while
+    # still proceeding with one coherent stack bundle. The generated markdown
+    # uses tech_stack["project_type"] as the display name in that case.
+    selected_types = []
 
     # Step 6: Show summary and confirm
     print("\n" + "-" * 60)
@@ -1502,7 +1717,9 @@ def main():
     print("-" * 60)
     print(f"  Tên dự án: {project_name}")
     print(f"  Đường dẫn: {full_project_path}")
-    print(f"  Loại dự án: {', '.join([PROJECT_TYPES[t]['name'] for t in selected_types])}")
+    print(f"  Loại dự án: {project_type_display}")
+    print(f"  Năng lực: {', '.join(selected_cap_ids) if selected_cap_ids else '(không)'}")
+    print(f"  Stack bundle: {tech_stack['bundle_name']} ({tech_stack['bundle_id']})")
 
     # Show tech stack summary
     if tech_stack.get("type") == "preset":
@@ -1515,6 +1732,9 @@ def main():
             print(f"  Tech Stack: {preset_name}")
     elif tech_stack.get("type") == "custom":
         print(f"  Tech Stack: Custom ({tech_stack.get('frontend', '')})")
+    elif tech_stack.get("type") == "bundle":
+        print(f"  Tech Stack: {tech_stack.get('bundle_name', 'TBD')}")
+        print(f"    Bundle ID: {tech_stack.get('bundle_id', 'TBD')}")
     else:
         print("  Tech Stack: Skip (AI sẽ đề xuất sau)")
 

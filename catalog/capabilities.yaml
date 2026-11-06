@@ -1,0 +1,214 @@
+{
+  "schema_version": "1.0.0",
+  "capabilities": [
+    {
+      "id": "authentication",
+      "name": "Authentication",
+      "description": "User identity verification and session management.",
+      "category": "security",
+      "example_implementations": ["nextauth", "supabase-auth", "aspnet-identity", "firebase-auth"],
+      "requires": [],
+      "conflicts": [],
+      "implies": ["authorization"],
+      "recommended_for": ["saas", "e-commerce", "fullstack-application", "dashboard", "mobile-application", "realtime-application"]
+    },
+    {
+      "id": "authorization",
+      "name": "Authorization",
+      "description": "Access control and permissions for users and resources.",
+      "category": "security",
+      "example_implementations": ["rbac", "abac", "aspnet-policies"],
+      "requires": ["authentication"],
+      "conflicts": [],
+      "implies": [],
+      "recommended_for": ["saas", "e-commerce", "fullstack-application", "dashboard"]
+    },
+    {
+      "id": "payments",
+      "name": "Payments",
+      "description": "One-time or recurring payment processing.",
+      "category": "operations",
+      "example_implementations": ["stripe", "paypal"],
+      "requires": [],
+      "conflicts": [],
+      "implies": [],
+      "recommended_for": ["saas", "e-commerce"]
+    },
+    {
+      "id": "subscriptions",
+      "name": "Subscriptions",
+      "description": "Recurring billing and subscription management.",
+      "category": "operations",
+      "example_implementations": ["stripe-billing", "recurring-billing"],
+      "requires": ["payments"],
+      "conflicts": [],
+      "implies": [],
+      "recommended_for": ["saas"]
+    },
+    {
+      "id": "email",
+      "name": "Email",
+      "description": "Transactional and marketing email delivery.",
+      "category": "operations",
+      "example_implementations": ["resend", "sendgrid", "smtp"],
+      "requires": [],
+      "conflicts": [],
+      "implies": [],
+      "recommended_for": ["saas", "e-commerce", "fullstack-application", "dashboard"]
+    },
+    {
+      "id": "file-upload",
+      "name": "File Upload",
+      "description": "File storage and upload handling.",
+      "category": "data",
+      "example_implementations": ["s3", "supabase-storage", "blob-storage"],
+      "requires": [],
+      "conflicts": [],
+      "implies": [],
+      "recommended_for": ["saas", "e-commerce", "fullstack-application"]
+    },
+    {
+      "id": "search",
+      "name": "Search",
+      "description": "Full-text or semantic search over content.",
+      "category": "data",
+      "example_implementations": ["elasticsearch", "meilisearch", "algolia"],
+      "requires": [],
+      "conflicts": [],
+      "implies": [],
+      "recommended_for": ["business-website", "blog-content", "e-commerce", "fullstack-application", "dashboard", "ai-rag"]
+    },
+    {
+      "id": "realtime",
+      "name": "Realtime",
+      "description": "Live updates over WebSockets or server-sent events.",
+      "category": "core",
+      "example_implementations": ["websockets", "supabase-realtime", "pusher"],
+      "requires": [],
+      "conflicts": [],
+      "implies": [],
+      "recommended_for": ["realtime-application", "fullstack-application", "dashboard"]
+    },
+    {
+      "id": "notifications",
+      "name": "Notifications",
+      "description": "In-app, push or SMS notifications.",
+      "category": "operations",
+      "example_implementations": ["email-notifications", "push-notifications", "sms"],
+      "requires": [],
+      "conflicts": [],
+      "implies": [],
+      "recommended_for": ["saas", "e-commerce", "dashboard", "desktop-application"]
+    },
+    {
+      "id": "multi-tenancy",
+      "name": "Multi-tenancy",
+      "description": "Isolated data and configuration per tenant/organisation.",
+      "category": "data",
+      "example_implementations": ["schema-per-tenant", "row-level-security"],
+      "requires": [],
+      "conflicts": [],
+      "implies": [],
+      "recommended_for": ["saas"]
+    },
+    {
+      "id": "cache",
+      "name": "Cache",
+      "description": "In-memory caching for performance and rate limiting.",
+      "category": "infrastructure",
+      "example_implementations": ["redis", "memcached"],
+      "requires": [],
+      "conflicts": [],
+      "implies": [],
+      "recommended_for": ["saas", "e-commerce", "dashboard", "backend-api", "ai-rag", "ai-agent"]
+    },
+    {
+      "id": "background-jobs",
+      "name": "Background Jobs",
+      "description": "Asynchronous background job processing.",
+      "category": "operations",
+      "example_implementations": ["celery", "hangfire", "cloud-tasks"],
+      "requires": ["queue"],
+      "conflicts": [],
+      "implies": [],
+      "recommended_for": ["backend-api", "saas", "ai-rag", "ai-agent"]
+    },
+    {
+      "id": "queue",
+      "name": "Queue",
+      "description": "Message queue for decoupled processing.",
+      "category": "infrastructure",
+      "example_implementations": ["rabbitmq", "celery", "azure-service-bus"],
+      "requires": [],
+      "conflicts": [],
+      "implies": [],
+      "recommended_for": ["backend-api", "ai-rag", "ai-agent"]
+    },
+    {
+      "id": "analytics",
+      "name": "Analytics",
+      "description": "Usage analytics and telemetry.",
+      "category": "core",
+      "example_implementations": ["plausible", "mixpanel", "application-insights"],
+      "requires": [],
+      "conflicts": [],
+      "implies": [],
+      "recommended_for": ["saas", "dashboard", "business-website", "blog-content"]
+    },
+    {
+      "id": "i18n",
+      "name": "Internationalisation",
+      "description": "Multi-language user interface and content.",
+      "category": "ux",
+      "example_implementations": ["next-i18next", "react-intl", "aspnet-localization"],
+      "requires": [],
+      "conflicts": [],
+      "implies": [],
+      "recommended_for": ["portfolio", "landing-page", "business-website", "blog-content"]
+    },
+    {
+      "id": "accessibility",
+      "name": "Accessibility",
+      "description": "Accessibility compliance (WCAG) and assistive technology support.",
+      "category": "ux",
+      "example_implementations": ["wcag", "aria", "axe-core"],
+      "requires": [],
+      "conflicts": [],
+      "implies": [],
+      "recommended_for": ["portfolio", "landing-page", "business-website", "dashboard"]
+    },
+    {
+      "id": "ai",
+      "name": "AI",
+      "description": "Generative AI / large language model capabilities.",
+      "category": "ai",
+      "example_implementations": ["openai", "anthropic", "langchain"],
+      "requires": [],
+      "conflicts": [],
+      "implies": [],
+      "recommended_for": ["ai-rag", "ai-agent"]
+    },
+    {
+      "id": "rag",
+      "name": "RAG",
+      "description": "Retrieval-augmented generation over private documents.",
+      "category": "ai",
+      "example_implementations": ["langchain", "llama-index"],
+      "requires": ["ai"],
+      "conflicts": [],
+      "implies": [],
+      "recommended_for": ["ai-rag", "ai-agent"]
+    },
+    {
+      "id": "vector-search",
+      "name": "Vector Search",
+      "description": "Semantic similarity search over embeddings.",
+      "category": "ai",
+      "example_implementations": ["pgvector", "pinecone", "weaviate", "qdrant"],
+      "requires": ["ai"],
+      "conflicts": [],
+      "implies": [],
+      "recommended_for": ["ai-rag"]
+    }
+  ]
+}
