@@ -30,6 +30,23 @@ import json
 from core.catalog_loader import load_catalog, DEFAULT_CATALOG_DIR
 from core.resolver import resolve_top, NOT_DECIDED
 
+# M4: portable canonical state + derived Markdown (separate layer; the M3
+# resolver stays pure and never writes files).
+from core.spec import (
+    build_project_spec,
+    read_project_spec,
+    write_project_spec,
+)  # noqa: E402
+from core.state import (
+    build_initial_state,
+    build_resources_lock,
+    read_state,
+    read_resources_lock,
+    write_resources_lock,
+    write_state,
+)  # noqa: E402
+from core.portable_renderer import render_all  # noqa: E402
+
 CONFIG_FILE = Path(__file__).parent / "config.json"
 # Bundled resources are the DEFAULT source
 BUNDLED_RESOURCE_ROOT = Path(__file__).parent / "resources"
@@ -1710,6 +1727,41 @@ def main():
     # still proceeding with one coherent stack bundle. The generated markdown
     # uses tech_stack["project_type"] as the display name in that case.
     selected_types = []
+
+    # Step 5b (M4): Portable canonical state generation (new-project only).
+    #   resolver result -> state builder -> state writer -> derived Markdown
+    # The M3 resolver stays pure; it never writes project.yaml/state.yaml/
+    # resources.lock. Canonical state lives in <project>/.ai-coding-starter/.
+    ai_state_dir = full_project_path / ".ai-coding-starter"
+
+    spec = build_project_spec(
+        project_name,
+        project_type_id=project_type_id,
+        capabilities=selected_cap_ids,
+        stack_bundle_id=bundle_id,
+        description="",
+    )
+    write_project_spec(ai_state_dir, spec)
+
+    state = build_initial_state(
+        str(spec.id),
+        phase="planning",
+        focus="",
+        canonical_branch=None,  # generator does not init Git for new projects
+    )
+    write_state(ai_state_dir, state)
+
+    lock = build_resources_lock(bundle_id, requested_bundle_id=bundle_id)
+    write_resources_lock(ai_state_dir, lock)
+
+    # Derived Markdown (readable, one-way: canonical -> Markdown) at project root.
+    render_all(
+        full_project_path,
+        spec,
+        state,
+        last_session_summary=None,
+        last_session_next_steps=None,
+    )
 
     # Step 6: Show summary and confirm
     print("\n" + "-" * 60)
