@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0.0",
+  "state": {
+    "phase": "development",
+    "focus": "shipping",
+    "active_tasks": [],
+    "completed_tasks": [],
+    "decisions_pointer": "DECISIONS.md",
+    "handoff_pointer": "HANDOFF.md",
+    "canonical_branch": "main",
+    "active_worktrees": [],
+    "last_session": null
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0.0",
+  "state": {
+    "phase": "planning",
+    "focus": "",
+    "active_tasks": [],
+    "completed_tasks": [],
+    "decisions_pointer": "DECISIONS.md",
+    "handoff_pointer": "HANDOFF.md"
+  }
+}

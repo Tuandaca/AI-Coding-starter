@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0.0",
+  "lockfile_version": 1,
+  "generated_at": "2026-01-01T00:00:00Z",
+  "generated_by": "ai-coding-starter-generator",
+  "catalog_version": "8b61d297dc07772a000b85fc93138c8aefd21c45",
+  "resources": [
+    {
+      "id": "project-planner",
+      "type": "agent",
+      "version": "1.0.0",
+      "provenance": {
+        "source": "bundled",
+        "commit_sha": "8b61d297dc07772a000b85fc93138c8aefd21c45",
+        "license": "MIT",
+        "reviewed_date": "2026-11-06",
+        "transformation": "none"
+      },
+      "selection_reason": "migrated_from_v1_legacy"
+    }
+  ],
+  "stack_bundle_resolution": {
+    "requested_bundle": "nextjs-supabase",
+    "resolved_bundle": "nextjs-supabase",
+    "technology_versions": {},
+    "compatibility_warnings": []
+  }
+}
