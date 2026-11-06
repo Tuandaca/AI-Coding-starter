@@ -262,12 +262,9 @@ class TestSetupScriptStatic(unittest.TestCase):
         self.assertIn("resources", self.sh.lower())
 
     def test_setup_scripts_config_equivalence(self):
-        """Both scripts write equivalent config.json fields."""
-        for script_content in [self.bat, self.sh]:
-            self.assertIn("bundled_resources_enabled", script_content)
-            self.assertIn("external_template_optional", script_content)
-            self.assertIn("MASTER_TEMPLATE_PATH", script_content)
-            self.assertIn("DEFAULT_PROJECT_PATH", script_content)
+        """Both scripts delegate config generation to setup_portable.py."""
+        self.assertIn("scripts\\setup_portable.py", self.bat)
+        self.assertIn("scripts/setup_portable.py", self.sh)
 
     def test_setup_bat_no_drive_letter_paths(self):
         """setup.bat has no D:\ hard-coded paths."""

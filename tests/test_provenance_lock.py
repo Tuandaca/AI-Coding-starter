@@ -22,13 +22,14 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 import new_project  # noqa: E402
+from core.catalog_loader import load_catalog, DEFAULT_CATALOG_DIR  # noqa: E402
 from core.state import (  # noqa: E402
     build_resources_lock,
     read_resources_lock,
     write_resources_lock,
 )
 
-CATALOG = new_project.load_starter_catalog() if hasattr(new_project, "load_starter_catalog") else None
+CATALOG = load_catalog(DEFAULT_CATALOG_DIR)
 
 BUNDLED_COMMIT = "8b61d297dc07772a000b85fc93138c8aefd21c45"
 

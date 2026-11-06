@@ -18,6 +18,20 @@ M2 CHANGE LOG (INTENTIONAL CHANGES):
 - New: test_setup_bat_no_external_clone, test_setup_sh_no_external_clone.
 - New: test_setup_bat_validates_bundled_resources, test_setup_sh_validates_bundled_resources.
 - New: test_setup_scripts_config_equivalence, test_setup_scripts_no_sed_mutation.
+
+M12 CHANGE LOG (INTENTIONAL CHANGES):
+- test_setup_bat_writes_config_json: setup.bat now delegates config generation
+  to scripts/setup_portable.py (proper JSON escaping via json.dump).
+- test_setup_sh_writes_config_json: setup.sh now delegates config generation
+  to scripts/setup_portable.py (proper JSON escaping via json.dump).
+- test_setup_sh_creates_newpj_shortcut: setup.sh now creates NewPJ.sh (POSIX),
+  not NewPJ.bat (Windows).
+- test_setup_bat_interactive_setup_sh_non_interactive: setup.bat no longer uses
+  set /p (Python helper handles prompting); setup.sh never used set /p.
+- test_setup_scripts_config_equivalence: Both scripts delegate to the Python
+  helper, which writes bundled_resources_enabled via json.dump.
+- test_platform_markers: setup.bat no longer uses set /p; setup.sh checks
+  python3 first then python.
 """
 
 import sys
@@ -74,20 +88,29 @@ class TestSetupScriptsStatic(unittest.TestCase):
         self.assertNotIn('$HOME/VibeCoding-Template', self.sh)
         self.assertNotIn('TEMPLATE_PATH=', self.sh)
 
-    # --- M2: Config generation ---
+    # --- M12: Config generation via shared Python helper ---
     def test_setup_bat_writes_config_json(self):
-        """setup.bat writes config.json with portable fields."""
-        self.assertIn('echo {>', self.bat)
-        self.assertIn("MASTER_TEMPLATE_PATH", self.bat)
-        self.assertIn("DEFAULT_PROJECT_PATH", self.bat)
-        self.assertIn("bundled_resources_enabled", self.bat)
+        """setup.bat delegates config generation to setup_portable.py."""
+        self.assertIn("scripts\\setup_portable.py", self.bat)
 
     def test_setup_sh_writes_config_json(self):
-        """INTENTIONAL CHANGE — M2: setup.sh now writes config.json (parity with setup.bat)."""
-        self.assertIn("config.json", self.sh)
-        self.assertIn("MASTER_TEMPLATE_PATH", self.sh)
-        self.assertIn("DEFAULT_PROJECT_PATH", self.sh)
-        self.assertIn("bundled_resources_enabled", self.sh)
+        """INTENTIONAL CHANGE — M12: setup.sh delegates config generation
+        to setup_portable.py (parity with setup.bat)."""
+        self.assertIn("scripts/setup_portable.py", self.sh)
+
+    def test_setup_bat_config_written_by_python_helper(self):
+        """setup.bat uses Python json.dump for proper escaping (no raw echo)."""
+        self.assertNotIn('echo {>', self.bat)
+        self.assertNotIn('echo   "MASTER_TEMPLATE_PATH"', self.bat)
+        self.assertNotIn('echo   "DEFAULT_PROJECT_PATH"', self.bat)
+        self.assertNotIn('echo   "bundled_resources_enabled"', self.bat)
+        self.assertNotIn('echo   "external_template_optional"', self.bat)
+
+    def test_setup_sh_config_written_by_python_helper(self):
+        """setup.sh uses Python json.dump, not heredoc interpolation."""
+        self.assertNotIn('cat > "$SCRIPT_DIR/config.json" << EOF', self.sh)
+        self.assertNotIn('"MASTER_TEMPLATE_PATH": null', self.sh)
+        self.assertNotIn('"DEFAULT_PROJECT_PATH": "$PROJECTS_PATH"', self.sh)
 
     # --- M2: No source mutation ---
     def test_setup_sh_no_sed_mutation(self):
@@ -102,8 +125,9 @@ class TestSetupScriptsStatic(unittest.TestCase):
         self.assertIn("python new_project.py", self.bat)
 
     def test_setup_sh_creates_newpj_shortcut(self):
-        self.assertIn("NewPJ.bat", self.sh)
-        self.assertIn("python new_project.py", self.sh)
+        """setup.sh creates NewPJ.sh (POSIX), not NewPJ.bat (Windows)."""
+        self.assertIn("NewPJ.sh", self.sh)
+        self.assertIn("python3 new_project.py", self.sh)
 
     # --- M2: Bundled resources validation ---
     def test_setup_bat_validates_bundled_resources(self):
@@ -117,22 +141,25 @@ class TestSetupScriptsStatic(unittest.TestCase):
     # --- Platform markers (retained) ---
     def test_platform_markers(self):
         self.assertIn("@echo off", self.bat)
-        self.assertIn("set /p", self.bat)        # interactive prompts on Windows
+        # setup.bat no longer uses set /p (Python helper prompts)
+        self.assertNotIn("set /p", self.bat)
         self.assertIn("#!/bin/bash", self.sh)
         self.assertIn("command -v python3", self.sh)
-        self.assertIn("mkdir -p", self.sh)
+        # setup.sh delegates directory creation to Python helper
+        self.assertNotIn("mkdir -p", self.sh)
 
     def test_setup_bat_interactive_setup_sh_non_interactive(self):
-        self.assertIn("set /p", self.bat)
+        """setup.bat delegates prompting to Python helper (no set /p);
+        setup.sh never used set /p."""
+        self.assertNotIn("set /p", self.bat)
         self.assertNotIn("set /p", self.sh)
 
     # --- M2: Setup parity ---
     def test_setup_scripts_config_equivalence(self):
-        """INTENTIONAL CHANGE — M2: Both scripts write equivalent config.json fields."""
-        self.assertIn("bundled_resources_enabled", self.bat)
-        self.assertIn("bundled_resources_enabled", self.sh)
-        self.assertIn("external_template_optional", self.bat)
-        self.assertIn("external_template_optional", self.sh)
+        """INTENTIONAL CHANGE — M12: Both scripts delegate to the Python
+        helper which writes config.json with bundled_resources_enabled etc."""
+        self.assertIn("scripts\\setup_portable.py", self.bat)
+        self.assertIn("scripts/setup_portable.py", self.sh)
 
 
 if __name__ == "__main__":
