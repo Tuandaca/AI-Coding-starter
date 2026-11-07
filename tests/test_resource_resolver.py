@@ -158,9 +158,11 @@ class TestResourceResolver(unittest.TestCase):
             catalog_dir=self.catalog_dir, resources_root=self.resources_dir,
         )
         self.assertTrue(result.ok)
+        valid_sources = {"bundled", "agency-agents"}
         for res in result.resources:
             self.assertEqual(res.version, "1.0.0")
-            self.assertEqual(res.provenance_source, "bundled")
+            self.assertIn(res.provenance_source, valid_sources,
+                          f"unexpected provenance source: {res.provenance_source}")
             self.assertTrue(res.provenance_commit_sha)
             self.assertEqual(res.provenance_license, "MIT")
 

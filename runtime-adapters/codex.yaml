@@ -13,7 +13,16 @@
     ".codex/config.toml"
   ],
   "render": {
-    "outputs": []
+    "outputs": [],
+    "agents": {
+      "path_template": ".codex/agents/{slug}.toml",
+      "content_template": [
+        "name = \"{name}\"",
+        "description = \"{description}\"",
+        "developer_instructions = \"{body}\""
+      ],
+      "mark_owned": true
+    }
   },
   "install": {
     "paths": []

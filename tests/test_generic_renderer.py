@@ -103,7 +103,13 @@ class TestGenericRendererRendering(unittest.TestCase):
         self.assertTrue(result.ok, msg=result.errors)
         owned = self.root / ".agent/GEMINI.md"
         self.assertTrue(owned.exists())
-        self.assertIn(owned, result.written)
+        # _safe_output_path() resolves paths; compare canonical resolved paths
+        # so the test is stable on Windows CI where tempdirs may use 8.3
+        # short-path aliases (RUNNER~1 vs runneradmin).
+        self.assertIn(
+            owned.resolve(),
+            [path.resolve() for path in result.written],
+        )
         content = owned.read_text(encoding="utf-8")
         self.assertIn("My Project", content)
         self.assertIn(str(self.spec.id), content)
@@ -245,6 +251,145 @@ class TestGenericRendererLoadAndValidate(unittest.TestCase):
         adapter["permission_policy"]["modifies_global_config"] = True
         result = self.renderer.validate_adapter(adapter)
         self.assertFalse(result.is_valid)
+
+
+class TestGenericRendererRenderAgents(unittest.TestCase):
+    """M6.6: Per-agent runtime-native rendering via render_agents()."""
+
+    def setUp(self):
+        self.temp_dir = Path(tempfile.mkdtemp(prefix="m5-render-agents-"))
+        self.root, self.spec, self.state, self.lock = make_canonical_project(
+            self.temp_dir
+        )
+        self.renderer = GenericRenderer(self.root, adapters_dir=str(ADAPTERS_DIR))
+        self.agents = [
+            {
+                "id": "engineering-frontend-developer",
+                "name": "Frontend Developer",
+                "description": "Expert frontend developer specializing in React/Vue/Angular.",
+                "division": "engineering",
+                "body": "You are an expert frontend developer...",
+            },
+            {
+                "id": "security-appsec-engineer",
+                "name": "AppSec Engineer",
+                "description": "Application security engineer focused on threat modeling.",
+                "division": "security",
+                "body": "You are an application security engineer...",
+            },
+        ]
+
+    def _agent_files_for(self, runtime_id):
+        """Expected agent output paths per runtime."""
+        expected = {
+            "codex": [".codex/agents/engineering-frontend-developer.toml",
+                      ".codex/agents/security-appsec-engineer.toml"],
+            "opencode": [".opencode/agents/engineering-frontend-developer.md",
+                         ".opencode/agents/security-appsec-engineer.md"],
+            "claude-code": [".claude/agents/engineering-frontend-developer.md",
+                            ".claude/agents/security-appsec-engineer.md"],
+            "cursor": [".cursor/rules/engineering-frontend-developer.mdc",
+                       ".cursor/rules/security-appsec-engineer.mdc"],
+            "antigravity": [".agent/skills/engineering-frontend-developer/SKILL.md",
+                            ".agent/skills/security-appsec-engineer/SKILL.md"],
+        }
+        return expected.get(runtime_id, [])
+
+    def test_render_agents_all_runtimes(self):
+        """All 5 supported runtimes render per-agent files successfully."""
+        for runtime_id in ALL_RUNTIME_IDS:
+            with self.subTest(runtime=runtime_id):
+                result = self.renderer.render_agents(runtime_id, self.agents)
+                self.assertTrue(result.ok, msg=f"{runtime_id}: {result.errors}")
+                self.assertEqual(len(result.written), 2,
+                                 f"{runtime_id} should write 2 agent files")
+                for expected_path in self._agent_files_for(runtime_id):
+                    self.assertTrue(
+                        (self.root / expected_path).exists(),
+                        f"{runtime_id}: {expected_path} not created",
+                    )
+
+    def test_render_agents_correct_content_placeholders(self):
+        """Placeholders {slug}, {name}, {description}, {division}, {body} resolved."""
+        result = self.renderer.render_agents("claude-code", self.agents)
+        self.assertTrue(result.ok, msg=result.errors)
+        content = (
+            self.root / ".claude/agents/engineering-frontend-developer.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("Frontend Developer", content)
+        self.assertIn("Expert frontend developer", content)
+        self.assertIn("engineering", content)
+        self.assertIn("You are an expert frontend developer...", content)
+        self.assertIn(
+            "<!-- ai-coding-starter runtime adapter: claude-code | generated | owned -->",
+            content,
+        )
+
+    def test_render_agents_codex_toml_format(self):
+        """Codex agents use TOML format (name = ..., description = ...)."""
+        result = self.renderer.render_agents("codex", self.agents)
+        self.assertTrue(result.ok, msg=result.errors)
+        content = (
+            self.root / ".codex/agents/engineering-frontend-developer.toml"
+        ).read_text(encoding="utf-8")
+        self.assertIn('name = "Frontend Developer"', content)
+        self.assertIn("description =", content)
+        self.assertIn("developer_instructions =", content)
+
+    def test_render_agents_cursor_mdc_format(self):
+        """Cursor agents use MDC format with frontmatter."""
+        result = self.renderer.render_agents("cursor", self.agents)
+        self.assertTrue(result.ok, msg=result.errors)
+        content = (
+            self.root / ".cursor/rules/engineering-frontend-developer.mdc"
+        ).read_text(encoding="utf-8")
+        self.assertIn("description:", content)
+        self.assertIn("alwaysApply: false", content)
+        self.assertIn("globs: \"\"", content)
+
+    def test_render_agents_deterministic(self):
+        """Same input produces byte-identical output across runs."""
+        result_a = self.renderer.render_agents("opencode", self.agents)
+        self.assertTrue(result_a.ok)
+        content_a = (
+            self.root / ".opencode/agents/engineering-frontend-developer.md"
+        ).read_text(encoding="utf-8")
+        self.renderer.render_agents("opencode", self.agents)
+        content_b = (
+            self.root / ".opencode/agents/engineering-frontend-developer.md"
+        ).read_text(encoding="utf-8")
+        self.assertEqual(content_a, content_b)
+
+    def test_render_agents_no_canonical_files_modified(self):
+        """Canonical state files untouched by agent rendering."""
+        before = {
+            name: (self.root / ".ai-coding-starter" / name).read_text(encoding="utf-8")
+            for name in ("project.yaml", "state.yaml", "resources.lock")
+        }
+        self.renderer.render_agents("claude-code", self.agents)
+        after = {
+            name: (self.root / ".ai-coding-starter" / name).read_text(encoding="utf-8")
+            for name in ("project.yaml", "state.yaml", "resources.lock")
+        }
+        self.assertEqual(before, after)
+
+    def test_render_agents_owned_files_removed_on_uninstall(self):
+        """Agent files are mark_owned and removed on uninstall."""
+        self.renderer.render_agents("antigravity", self.agents)
+        self.assertTrue(
+            (self.root / ".agent/skills/engineering-frontend-developer/SKILL.md").exists()
+        )
+        uninstall_result = self.renderer.uninstall("antigravity")
+        self.assertTrue(uninstall_result.ok, msg=uninstall_result.errors)
+        self.assertFalse(
+            (self.root / ".agent/skills/engineering-frontend-developer/SKILL.md").exists()
+        )
+
+    def test_render_agents_empty_list(self):
+        """Empty agent list is a no-op, returns ok."""
+        result = self.renderer.render_agents("claude-code", [])
+        self.assertTrue(result.ok)
+        self.assertEqual(result.written, [])
 
 
 if __name__ == "__main__":

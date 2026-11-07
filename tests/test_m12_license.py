@@ -37,7 +37,7 @@ EXPECTED_SOURCES = {
     },
     "agency-agents": {
         "license": "MIT",
-        "classification": "architectural-inspiration",
+        "classification": "imported-catalog",
     },
     "agent-reach": {
         "license": "MIT",
@@ -167,7 +167,7 @@ class TestUpstreamCatalog(unittest.TestCase):
         """Optional integrations must not import resources by default."""
         for source in self.catalog["sources"]:
             sid = source["id"]
-            if sid in ("agency-agents", "agent-reach", "orca",
+            if sid in ("agent-reach", "orca",
                        "codebase-memory-mcp", "openmontage"):
                 self.assertEqual(source["selected_resource_ids"], [],
                                  f"{sid}: selected_resource_ids must be []")

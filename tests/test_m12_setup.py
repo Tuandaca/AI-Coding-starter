@@ -86,41 +86,47 @@ class TestSetupHelperJsonEscaping(unittest.TestCase):
     def tearDownClass(cls):
         _restore_canonical_config()
 
+    def _assert_path_round_trips(self, projects_dir: Path, config_path: Path = CONFIG_FILE) -> None:
+        """Assert config path round-trips, comparing resolved canonical paths.
+
+        On Windows CI runners, tempfile.TemporaryDirectory() may yield an
+        8.3 short-path alias (e.g. RUNNER~1) while production code resolves
+        to the long path (e.g. runneradmin). Both refer to the same
+        filesystem location, so compare via resolve() rather than lexical
+        string equality.
+        """
+        result = _run_helper(str(projects_dir))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        config = _parse_config(config_path)
+        self.assertEqual(
+            Path(config["DEFAULT_PROJECT_PATH"]).resolve(),
+            projects_dir.resolve(),
+        )
+
     def test_windows_backslash_path_round_trips(self):
         """Windows paths with backslashes must survive json.dumps/json.loads."""
         with tempfile.TemporaryDirectory() as td:
             projects_dir = Path(td) / "Users" / "alice" / "Projects"
-            result = _run_helper(str(projects_dir))
-            self.assertEqual(result.returncode, 0, result.stderr)
-            config = _parse_config(CONFIG_FILE)
-            self.assertEqual(config["DEFAULT_PROJECT_PATH"], str(projects_dir))
+            self._assert_path_round_trips(projects_dir)
 
     def test_windows_mixed_backslash_path_round_trips(self):
         """Mixed double-backslash Windows paths round-trip correctly."""
         with tempfile.TemporaryDirectory() as td:
             projects_dir = Path(td) / "Users" / "alice" / "Projects"
-            result = _run_helper(str(projects_dir))
-            self.assertEqual(result.returncode, 0, result.stderr)
-            config = _parse_config(CONFIG_FILE)
-            self.assertEqual(config["DEFAULT_PROJECT_PATH"], str(projects_dir))
+            self._assert_path_round_trips(projects_dir)
 
+    @unittest.skipUnless(os.name == "nt", "trailing backslash semantics are Windows-specific")
     def test_windows_trailing_backslash_round_trips(self):
-        """Windows path ending in backslash round-trips."""
+        """Windows path ending in backslash round-trips (Windows only)."""
         with tempfile.TemporaryDirectory() as td:
             projects_dir = Path(td) / "tmp" / "new" / "test"
-            result = _run_helper(str(projects_dir) + "\\")
-            self.assertEqual(result.returncode, 0, result.stderr)
-            config = _parse_config(CONFIG_FILE)
-            self.assertEqual(config["DEFAULT_PROJECT_PATH"], str(projects_dir))
+            self._assert_path_round_trips(Path(str(projects_dir) + "\\"))
 
     def test_windows_path_with_spaces_round_trips(self):
         """Windows paths with spaces round-trip through JSON."""
         with tempfile.TemporaryDirectory() as td:
             projects_dir = Path(td) / "Users" / "Alice Smith" / "Projects"
-            result = _run_helper(str(projects_dir))
-            self.assertEqual(result.returncode, 0, result.stderr)
-            config = _parse_config(CONFIG_FILE)
-            self.assertEqual(config["DEFAULT_PROJECT_PATH"], str(projects_dir))
+            self._assert_path_round_trips(projects_dir)
 
     def test_posix_absolute_path_round_trips(self):
         """POSIX absolute paths round-trip through JSON."""
@@ -129,7 +135,13 @@ class TestSetupHelperJsonEscaping(unittest.TestCase):
             result = _run_helper(str(projects_dir))
             self.assertEqual(result.returncode, 0, result.stderr)
             config = _parse_config(CONFIG_FILE)
-            self.assertEqual(config["DEFAULT_PROJECT_PATH"], str(projects_dir))
+            # Production code calls .resolve() on the config path, so compare
+            # resolved canonical paths to be stable on Windows CI where
+            # tempfile.TemporaryDirectory() may yield 8.3 short-path aliases.
+            self.assertEqual(
+                Path(config["DEFAULT_PROJECT_PATH"]).resolve(),
+                projects_dir.resolve(),
+            )
 
     def test_posix_path_with_spaces_round_trips(self):
         """POSIX paths with spaces round-trip through JSON."""
@@ -138,7 +150,10 @@ class TestSetupHelperJsonEscaping(unittest.TestCase):
             result = _run_helper(str(projects_dir))
             self.assertEqual(result.returncode, 0, result.stderr)
             config = _parse_config(CONFIG_FILE)
-            self.assertEqual(config["DEFAULT_PROJECT_PATH"], str(projects_dir))
+            self.assertEqual(
+                Path(config["DEFAULT_PROJECT_PATH"]).resolve(),
+                projects_dir.resolve(),
+            )
 
     def test_unicode_path_round_trips(self):
         """Unicode paths are preserved through JSON (UTF-8)."""
@@ -147,7 +162,10 @@ class TestSetupHelperJsonEscaping(unittest.TestCase):
             result = _run_helper(str(projects_dir))
             self.assertEqual(result.returncode, 0, result.stderr)
             config = _parse_config(CONFIG_FILE)
-            self.assertEqual(config["DEFAULT_PROJECT_PATH"], str(projects_dir))
+            self.assertEqual(
+                Path(config["DEFAULT_PROJECT_PATH"]).resolve(),
+                projects_dir.resolve(),
+            )
 
     def test_config_has_no_machine_specific_path_when_committed(self):
         """The committed config.json must not contain a machine-specific
@@ -266,7 +284,10 @@ class TestConfigSchema(unittest.TestCase):
             self.assertEqual(config["MASTER_TEMPLATE_PATH"], None)
             self.assertEqual(config["bundled_resources_enabled"], True)
             self.assertEqual(config["external_template_optional"], True)
-            self.assertEqual(config["DEFAULT_PROJECT_PATH"], str(projects_dir))
+            self.assertEqual(
+                Path(config["DEFAULT_PROJECT_PATH"]).resolve(),
+                projects_dir.resolve(),
+            )
 
 
 if __name__ == "__main__":

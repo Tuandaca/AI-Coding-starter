@@ -7,7 +7,7 @@ Covers:
   - unique source IDs, valid SHA-40, valid classifications, license present
   - build_resources_lock with selected resources (round-trip, empty lock)
   - no fake technology versions (honest absence)
-  - upstream classifications (OpenMontage concepts-only, Agency imports empty)
+  - upstream classifications (OpenMontage concepts-only, Agency imported catalog)
   - license consistency between catalog and THIRD_PARTY_NOTICES.md
   - missing provenance fails clearly
   - offline generation (no network)
@@ -39,6 +39,7 @@ VALID_CLASSIFICATIONS = {
     "copied-resource",
     "transformed-resource",
     "architectural-inspiration",
+    "imported-catalog",
     "optional-external-integration",
 }
 
@@ -124,11 +125,16 @@ class TestProvenanceCatalog(unittest.TestCase):
         self.assertEqual(openmontage["selected_resource_ids"], [])
         self.assertIn("AGPL", openmontage["license"])
 
-    def test_agency_imports_empty_for_m7(self):
+    def test_agency_imports_catalog_provenance(self):
+        """Agency Agents is now an imported catalog (not empty inspiration)."""
         agency = next(s for s in self.sources if s["id"] == "agency-agents")
-        self.assertEqual(agency["classification"], "architectural-inspiration")
-        self.assertEqual(agency["selected_resource_ids"], [])
+        self.assertEqual(agency["classification"], "imported-catalog")
         self.assertEqual(agency["license"], "MIT")
+        self.assertEqual(agency["commit_sha"],
+                         "b859c515d813efcfc4755d3471dd9e7686c7706d")
+        self.assertTrue(agency["selected_resource_ids"],
+                        "agency-agents should have imported resource ids")
+        self.assertIsNotNone(agency.get("import_version"))
 
     def test_bundled_source_is_locally_authored(self):
         bundled = next(s for s in self.sources if s["id"] == "ai-coding-starter-bundled")

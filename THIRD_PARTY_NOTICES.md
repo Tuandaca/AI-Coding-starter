@@ -22,11 +22,23 @@ are imported into generated projects by M7 unless noted.
 | Source | Repository | Commit SHA | License | Classification | Imported resources |
 |---|---|---|---|---|---|
 | AI-Coding-starter Bundled Resources | (local) | 8b61d297dc07772a000b85fc93138c8aefd21c45 | MIT | bundled-local | 60 resource files (58 unique IDs) |
-| Agency Agents | https://github.com/msitarzewski/agency-agents | b859c515d813efcfc4755d3471dd9e7686c7706d | MIT | architectural-inspiration | none |
+| Agency Agents | https://github.com/msitarzewski/agency-agents | b859c515d813efcfc4755d3471dd9e7686c7706d | MIT | imported-catalog | 268 agent records (catalog/agency-agents.yaml) |
 | Agent-Reach | https://github.com/Panniantong/Agent-Reach | 47898829204ad27521d8a1719e3aeca3b8a3e0ca | MIT | optional-external-integration | none |
 | Orca | https://github.com/orca-cli/orca | 5beeefcb57555962bb93facc54b5f82484731802 | MIT | optional-external-integration | none |
 | Codebase Memory MCP | https://github.com/DeusData/codebase-memory-mcp | 612eee2518ef84cc573e491fdee5fa5c90264cb5 | MIT | optional-external-integration | none |
 | OpenMontage | https://github.com/calesthio/OpenMontage | d21f5d4eaa08422b09c7091757a05affcbabb35b | AGPL-3.0 | architectural-inspiration | none |
+
+## Agency Agents imported catalog
+
+Agency Agents (MIT) is imported as the canonical specialist knowledge base at
+`catalog/agency-agents.yaml`, produced by the maintainer-side importer
+`scripts/sync_agency_agents.py` from upstream commit
+`b859c515d813efcfc4755d3471dd9e7686c7706d`. The catalog contains all
+268 agents across 18 divisions. Each record carries full provenance (upstream
+repository, commit SHA, license, import date, and per-agent SHA-256 content
+hash). Agency Agents is a **knowledge base only** — it is not a runtime
+dependency, and end-user project generation activates only a small bounded
+team of agents selected by the deterministic resolver (never the full catalog).
 
 ## OpenMontage license firewall
 

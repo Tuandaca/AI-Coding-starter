@@ -1,28 +1,28 @@
 """
-Resource resolver for AI-Coding-starter V2 Milestone M12.
+Resource resolver for AI-Coding-starter V2 Milestone M12 / M6.3-M6.4.
 
-Resolves project type + capabilities + stack bundle to a set of resource
-selections (id, type, version, provenance, selection_reason).
-
-These resources are then used by core/generic-renderer.py to render
-runtime-specific instruction files, and by new_project.py to copy resources
-into the generated project.
+Resolves project type + capabilities + stack bundle (+ optional execution
+pack) to a bounded set of resource selections (id, type, version,
+provenance, selection_reason).
 
 Architecture:
-    project type ID + capabilities + stack bundle ID
+    project type ID + capabilities + stack bundle ID [+ execution pack]
             ↓
-    Resource selection (this module)
+    ResourceRegistry  (bundled + agency-agents canonical resources)
+    ExecutionPackRegistry  (validated execution packs)
             ↓
-    copy_selective()  +  build_resources_lock()
+    ResourceResolver  (deterministic, bounded team selection)
+            ↓
+    ResourceSelectionResult
 
 Design principles:
   * Runtime-agnostic. No vendor branches.
   * Offline. No network, no LLM.
   * Stdlib-only.
-  * Honest inference: never guesses resource IDs; validates against
-    filesystem.
-  * (type, id) collision-safe: same ID across different resource types
-    is treated as distinct.
+  * Honest inference: never guesses resource IDs; validates against registry.
+  * (type, id) collision-safe.
+  * Bounded activation: full catalog is knowledge base; resolver activates only
+    a small team per project (default core 2-5, total <= 8, hard ceiling 10).
 """
 
 from __future__ import annotations
@@ -32,7 +32,72 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from core.domain.contracts.id_policy import make_id
+from core.resource_registry import (
+    ResourceCatalogLoader,
+    ResourceRegistry,
+    build_default_registry,
+)
+from core.execution_pack_registry import (
+    ExecutionPackRegistry,
+    build_default_pack_registry,
+)
+
+# Canonical location of the resource requirements catalog relative to this module.
+DEFAULT_CATALOG_DIR = Path(__file__).resolve().parent.parent / "catalog"
+
+# Mapping from resource type ID to directory name under resources/.
+RESOURCE_TYPE_TO_DIR = {
+    "agent": "agents",
+    "skill": "skills",
+    "shared-module": "shared",
+    "workflow": "workflows",
+    "script": "scripts",
+    "template": "core",
+    "rule": "rules",
+}
+
+# Team size policy (M6.4 / Section 13).
+DEFAULT_TEAM_CEILING = 8      # typical total ceiling
+HARD_TEAM_CEILING = 10        # hard default ceiling (override only by explicit pack)
+CORE_TEAM_MIN = 2             # project-planner + orchestrator
+CORE_TEAM_MAX = 5
+SPECIALIST_MAX = 5
+
+# Agency division → relevant project type IDs (explicit, deterministic).
+# Used to rank agency specialists for a given project type. Divisions not
+# listed here contribute no agency specialists (empty set).
+DIVISION_PROJECT_TYPE_RELEVANCE: dict[str, set[str]] = {
+    "engineering": {
+        "saas", "fullstack-application", "backend-api", "ai-rag", "ai-agent",
+        "realtime-application", "desktop-application", "mobile-application",
+        "e-commerce",
+    },
+    "design": {
+        "portfolio", "landing-page", "business-website", "saas",
+        "fullstack-application",
+    },
+    "security": {
+        "e-commerce", "saas", "backend-api", "fullstack-application",
+    },
+    "testing": {
+        "saas", "fullstack-application", "e-commerce", "backend-api",
+    },
+    "product": {
+        "saas", "fullstack-application", "business-website",
+    },
+    "project-management": {
+        "saas", "fullstack-application",
+    },
+    "support": {
+        "saas", "e-commerce", "fullstack-application",
+    },
+    "research": {
+        "ai-rag", "ai-agent",
+    },
+    "specialized": {
+        "saas", "fullstack-application", "ai-agent", "ai-rag",
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -50,6 +115,9 @@ class ResourceSelection:
     provenance_commit_sha: str = "8b61d297dc07772a000b85fc93138c8aefd21c45"
     provenance_license: str = "MIT"
     selection_reason: str = ""
+    name: str = ""
+    description: str = ""
+    division: str = ""
 
 
 @dataclass(frozen=True)
@@ -60,6 +128,7 @@ class ResourceSelectionResult:
     project_type_id: str = ""
     selected_capability_ids: list[str] = field(default_factory=list)
     stack_bundle_id: str = ""
+    execution_pack_id: Optional[str] = None
     errors: list[str] = field(default_factory=list)
 
     @property
@@ -72,86 +141,282 @@ class ResourceSelectionResult:
         return {(r.type, r.id): r for r in self.resources}
 
 
-# Canonical location of the resource requirements catalog relative to this module.
-DEFAULT_CATALOG_DIR = Path(__file__).resolve().parent.parent / "catalog"
+class ResourceResolver:
+    """Deterministic, bounded resource resolver.
 
-# Mapping from resource type ID to directory name under resources/.
-RESOURCE_TYPE_TO_DIR = {
-    "agent": "agents",
-    "skill": "skills",
-    "shared-module": "shared",
-    "workflow": "workflows",
-    "script": "scripts",
-    "template": "core",
-    "rule": "rules",
-}
+    Selects a small active team from the full canonical registry
+    (bundled + agency-agents). Never activates the entire catalog.
 
+    Resolution priority (§12):
+      1. Execution pack core roles (highest priority)
+      2. Project-type-relevant bundled resources
+      3. Capability-driven bundled resources
+      4. Agency specialists relevant to project type (division match)
+      5. Quality/safety roles (implied by capabilities)
 
-def _load_resource_requirements(catalog_dir: Path) -> list[dict]:
-    """Load catalog/resource-requirements.yaml as JSON-compatible text.
-
-    Returns the list of ``resource_requirements`` entries, each mapping a
-    project type id to the resources selected for that type (plus
-    capability-driven selections).
+    Team size policy (§13):
+      Core 2-5 agents, specialists 0-5 agents, total <= 8,
+      hard ceiling 10 agents.
     """
-    path = catalog_dir / "resource-requirements.yaml"
-    try:
-        with open(path, "r", encoding="utf-8") as handle:
-            data = json.load(handle)
-    except FileNotFoundError:
+
+    def __init__(
+        self,
+        registry: ResourceRegistry,
+        pack_registry: Optional[ExecutionPackRegistry] = None,
+    ) -> None:
+        self.registry = registry
+        self.pack_registry = pack_registry
+
+    def resolve(
+        self,
+        project_type_id: str,
+        selected_capability_ids: list[str],
+        stack_bundle_id: str,
+        execution_pack_id: Optional[str] = None,
+    ) -> ResourceSelectionResult:
+        """Resolve to a bounded resource selection.
+
+        Args:
+            project_type_id: Canonical project type ID.
+            selected_capability_ids: Canonical capability IDs chosen by user.
+            stack_bundle_id: Canonical stack bundle ID.
+            execution_pack_id: Optional execution pack slug. When given, its
+                core roles are activated first (highest priority).
+
+        Returns:
+            ResourceSelectionResult with bounded resources and selection
+            reasons.
+        """
+        errors: list[str] = []
+        resources: list[ResourceSelection] = []
+        seen: set[tuple[str, str]] = set()
+
+        project_type_id = str(project_type_id or "")
+        selected_caps = sorted({str(c) for c in (selected_capability_ids or [])})
+        stack_bundle_id = str(stack_bundle_id or "")
+
+        # --- 1. Execution pack core roles (highest priority) --------------
+        pack = None
+        if execution_pack_id is not None and self.pack_registry is not None:
+            pack = self.pack_registry.get(execution_pack_id)
+            if pack is None:
+                errors.append(
+                    f"Execution pack not found: {execution_pack_id!r}"
+                )
+            else:
+                for role_id in pack.core_roles:
+                    key = ("agent", role_id)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    resources.append(
+                        self._make_selection(
+                            "agent", role_id,
+                            f"execution-pack:{pack.id} core-role",
+                        )
+                    )
+
+        # --- 2. Execution pack optional roles (trigger-matched) -----------
+        if pack is not None:
+            for opt_role in pack.optional_roles:
+                triggered = False
+                if opt_role.activation == "capability-triggered":
+                    if any(c in selected_caps for c in opt_role.trigger_capabilities):
+                        triggered = True
+                elif opt_role.activation == "stack-triggered":
+                    if stack_bundle_id in opt_role.trigger_stack_bundles:
+                        triggered = True
+                elif opt_role.activation == "always":
+                    triggered = True
+                # as-needed / post-fix are not auto-triggered here
+
+                if not triggered:
+                    continue
+
+                key = ("agent", opt_role.resource_id)
+                if key in seen:
+                    continue
+                seen.add(key)
+                resources.append(
+                    self._make_selection(
+                        "agent", opt_role.resource_id,
+                        f"execution-pack:{pack.id} optional-role "
+                        f"({opt_role.activation})",
+                    )
+                )
+
+        # --- 3. Project-type-relevant bundled resources --------------------
+        pt_resources = self._load_project_type_resources(project_type_id)
+        for res_def in pt_resources:
+            rid = res_def.get("id", "")
+            rtype = res_def.get("type", "")
+            reason = res_def.get("reason", f"project-type:{project_type_id}")
+            if not rid or not rtype:
+                errors.append(f"Invalid resource entry: missing id or type: {res_def}")
+                continue
+            key = (rtype, rid)
+            if key in seen:
+                continue
+            seen.add(key)
+            if not self._registry_has(rtype, rid):
+                errors.append(f"Resource not found in registry: {rtype}:{rid}")
+                continue
+            resources.append(self._make_selection(rtype, rid, reason))
+
+        # --- 4. Capability-driven bundled resources -----------------------
+        cap_to_resources = self._build_capability_map(pt_resources)
+        for cap_id in selected_caps:
+            for defn in cap_to_resources.get(cap_id, []):
+                rid = defn["id"]
+                rtype = defn["type"]
+                key = (rtype, rid)
+                if key in seen:
+                    continue
+                if not self._registry_has(rtype, rid):
+                    errors.append(
+                        f"Resource not found in registry: {rtype}:{rid} "
+                        f"(capability: {cap_id})"
+                    )
+                    continue
+                seen.add(key)
+                resources.append(self._make_selection(rtype, rid, defn["reason"]))
+
+        # --- 5. Agency specialists relevant to project type --------------
+        agency_agents = self._select_agency_specialists(project_type_id)
+        # Count agents so far (pack core + optional + bundled agents)
+        agent_count = sum(1 for r in resources if r.type == "agent")
+        agent_slots_remaining = max(0, HARD_TEAM_CEILING - agent_count)
+        for agent in agency_agents[:agent_slots_remaining]:
+            if agent_count >= HARD_TEAM_CEILING:
+                break
+            key = ("agent", agent.id)
+            if key in seen:
+                continue
+            seen.add(key)
+            agent_count += 1
+            reason = f"agency-division:{agent.division} relevance to project-type:{project_type_id}"
+            resources.append(self._make_selection("agent", agent.id, reason))
+
+        # --- 6. Enforce team size ceiling ---------------------------------
+        if agent_count > HARD_TEAM_CEILING:
+            # Should not happen due to slots logic, but keep as safety net.
+            agent_resources = [r for r in resources if r.type == "agent"]
+            non_agent = [r for r in resources if r.type != "agent"]
+            resources = non_agent + agent_resources[:HARD_TEAM_CEILING]
+            errors.append(
+                f"Team size exceeded hard ceiling {HARD_TEAM_CEILING}; "
+                f"truncated to top-ranked selections."
+            )
+
+        # Deterministic ordering: type then id.
+        resources.sort(key=lambda r: (r.type, r.id))
+
+        return ResourceSelectionResult(
+            resources=resources,
+            project_type_id=project_type_id,
+            selected_capability_ids=selected_caps,
+            stack_bundle_id=stack_bundle_id,
+            execution_pack_id=execution_pack_id,
+            errors=errors,
+        )
+
+    # -- helpers ------------------------------------------------------------
+    def _registry_has(self, rtype: str, rid: str) -> bool:
+        return self.registry.get(rtype, rid) is not None
+
+    def _load_project_type_resources(
+        self, project_type_id: str
+    ) -> list[dict]:
+        """Load resource-requirements.yaml entries for a project type."""
+        path = DEFAULT_CATALOG_DIR / "resource-requirements.yaml"
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return []
+        if not isinstance(data, dict):
+            return []
+        requirements = data.get("resource_requirements", [])
+        if not isinstance(requirements, list):
+            return []
+        for entry in requirements:
+            if entry.get("project_type") == project_type_id:
+                return entry.get("resources", [])
         return []
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"Malformed JSON in {path}: {exc}") from exc
-    if not isinstance(data, dict):
-        return []
-    requirements = data.get("resource_requirements", [])
-    return requirements if isinstance(requirements, list) else []
+
+    def _build_capability_map(
+        self, pt_resources: list[dict]
+    ) -> dict[str, list[dict]]:
+        cap_to_resources: dict[str, list[dict]] = {}
+        for defn in pt_resources:
+            reason = defn.get("reason", "")
+            if reason.startswith("capability:"):
+                cap_id = reason[len("capability:"):]
+                cap_to_resources.setdefault(cap_id, []).append(defn)
+        return cap_to_resources
+
+    def _select_agency_specialists(
+        self, project_type_id: str
+    ) -> list:
+        """Select agency agents relevant to the project type.
+
+        Returns agents sorted deterministically by id. Limited to
+        SPECIALIST_MAX entries (caller enforces total ceiling).
+        """
+        relevant_divisions = {
+            div for div, pts in DIVISION_PROJECT_TYPE_RELEVANCE.items()
+            if project_type_id in pts
+        }
+        if not relevant_divisions:
+            return []
+
+        candidates: list = []
+        for agent in self.registry.list_agents():
+            if agent.division in relevant_divisions:
+                candidates.append(agent)
+        candidates.sort(key=lambda a: a.id)
+        return candidates[:SPECIALIST_MAX]
+
+    def _make_selection(
+        self,
+        rtype: str,
+        rid: str,
+        reason: str,
+    ) -> ResourceSelection:
+        """Build a ResourceSelection, populating name/description + provenance
+        from the registry ref (falls back to bundled defaults when ref absent)."""
+        DEFAULT_SHA = "8b61d297dc07772a000b85fc93138c8aefd21c45"
+        ref = self.registry.get(rtype, rid)
+        prov = ref.provenance if ref else {}
+        return ResourceSelection(
+            id=rid,
+            type=rtype,
+            version="1.0.0",
+            provenance_source=prov.get("source", "bundled"),
+            provenance_commit_sha=prov.get("upstream_commit", DEFAULT_SHA),
+            provenance_license=prov.get("license", "MIT"),
+            selection_reason=reason,
+            name=(ref.name if ref else rid),
+            description=(ref.description if ref else ""),
+            division=(ref.division if ref else ""),
+        )
 
 
-def _resource_exists(resources_root: Path, rtype: str, rid: str) -> bool:
-    """Check if a resource exists under resources/<type>/<rid>.<ext> or
-    resources/<type>/<rid>/<anything>.
-
-    Uses RESOURCE_TYPE_TO_DIR to map canonical resource type IDs to actual
-    directory names (e.g. "shared-module" -> "shared").
-    """
-    type_dir_name = RESOURCE_TYPE_TO_DIR.get(rtype, rtype)
-    type_dir = resources_root / type_dir_name
-    if not type_dir.is_dir():
-        return False
-    # Try direct file match: <type>/<rid>.<ext>
-    for ext in (".md", ".py", ".yaml", ".json"):
-        if (type_dir / f"{rid}{ext}").is_file():
-            return True
-    # Try subdirectory match: <type>/<rid>/<anything>
-    rid_dir = type_dir / rid
-    if rid_dir.is_dir():
-        return any(rid_dir.rglob("*"))
-    return False
-
-
+# Backward-compatible module-level API (M5/M7).
 def resolve_resources(
     project_type_id: str,
     selected_capability_ids: list[str],
     stack_bundle_id: str,
     catalog_dir: Path | None = None,
     resources_root: Path | None = None,
+    execution_pack_id: Optional[str] = None,
+    pack_registry: Optional[ExecutionPackRegistry] = None,
 ) -> ResourceSelectionResult:
     """Resolve project type + capabilities + stack bundle to resource selections.
 
-    Args:
-        project_type_id: Canonical project type ID (e.g. "saas").
-        selected_capability_ids: Canonical capability IDs chosen by the user.
-        stack_bundle_id: Canonical stack bundle ID.
-        catalog_dir: Directory containing catalog files. Defaults to
-            <repo_root>/catalog.
-        resources_root: Directory containing bundled resources. Defaults to
-            <repo_root>/resources.
-
-    Returns:
-        A ResourceSelectionResult. Each entry has id, type, version,
-        provenance, and selection_reason. Errors are collected rather
-        than raised.
+    Backward-compatible wrapper around :class:`ResourceResolver`. Builds the
+    default registry (bundled + agency catalog) from ``resources_root`` and
+    ``catalog_dir/agency-agents.yaml``.
     """
     if catalog_dir is None:
         catalog_dir = DEFAULT_CATALOG_DIR
@@ -159,106 +424,20 @@ def resolve_resources(
     if resources_root is None:
         resources_root = Path(__file__).resolve().parent.parent / "resources"
 
-    errors: list[str] = []
-    resources: list[ResourceSelection] = []
+    agency_catalog_path = catalog_dir / "agency-agents.yaml"
+    registry = ResourceCatalogLoader(resources_root, agency_catalog_path).load()
 
-    # Load resource requirements catalog
-    raw = _load_resource_requirements(catalog_dir)
-
-    # Build lookup: project_type_id -> list of resource dicts
-    req_by_type: dict[str, list[dict]] = {}
-    for entry in raw:
-        pt_id = entry.get("project_type")
-        if pt_id:
-            req_by_type.setdefault(pt_id, []).extend(entry.get("resources", []))
-
-    # Resolve project type resources
-    pt_resources = req_by_type.get(project_type_id, [])
-    seen: set[tuple[str, str]] = set()
-
-    for res_def in pt_resources:
-        rid = res_def.get("id", "")
-        rtype = res_def.get("type", "")
-        reason = res_def.get("reason", f"project-type:{project_type_id}")
-
-        if not rid or not rtype:
-            errors.append(f"Invalid resource entry: missing id or type: {res_def}")
-            continue
-
-        key = (rtype, rid)
-        if key in seen:
-            errors.append(f"Duplicate resource in catalog: {rtype}:{rid}")
-            continue
-        seen.add(key)
-
-        if not _resource_exists(resources_root, rtype, rid):
-            errors.append(
-                f"Resource not found: {rtype}:{rid} "
-                f"(expected at resources/{type_dir_name(rtype)}/{rid}.*"
-            )
-            continue
-
-        resources.append(
-            ResourceSelection(
-                id=rid,
-                type=rtype,
-                version="1.0.0",
-                provenance_source="bundled",
-                provenance_commit_sha="8b61d297dc07772a000b85fc93138c8aefd21c45",
-                provenance_license="MIT",
-                selection_reason=reason,
-            )
+    if pack_registry is None:
+        pack_registry = build_default_pack_registry(
+            resource_registry=registry
         )
 
-    # Resolve capability-based resources. A resource whose reason is
-    # ``capability:<cap-id>`` is selected when that capability is chosen.
-    # Matching is exact on the capability id declared in the reason (never
-    # on the resource id, which would mismatch e.g. security-auditor for
-    # authentication).
-    cap_to_resources: dict[str, list[dict]] = {}
-    for entry in raw:
-        for res_def in entry.get("resources", []):
-            rid = res_def.get("id", "")
-            rtype = res_def.get("type", "")
-            reason = res_def.get("reason", "")
-            if reason.startswith("capability:"):
-                derived_cap_id = reason[len("capability:"):]
-                cap_to_resources.setdefault(derived_cap_id, []).append(
-                    {"id": rid, "type": rtype, "reason": reason}
-                )
-
-    for cap_id in selected_capability_ids:
-        for defn in cap_to_resources.get(cap_id, []):
-            rid = defn["id"]
-            rtype = defn["type"]
-            key = (rtype, rid)
-            if key in seen:
-                continue
-            if not _resource_exists(resources_root, rtype, rid):
-                errors.append(
-                    f"Resource not found: {rtype}:{rid} "
-                    f"(capability: {cap_id})"
-                )
-                continue
-            seen.add(key)
-            resources.append(
-                ResourceSelection(
-                    id=rid,
-                    type=rtype,
-                    version="1.0.0",
-                    provenance_source="bundled",
-                    provenance_commit_sha="8b61d297dc07772a000b85fc93138c8aefd21c45",
-                    provenance_license="MIT",
-                    selection_reason=defn["reason"],
-                )
-            )
-
-    return ResourceSelectionResult(
-        resources=resources,
+    resolver = ResourceResolver(registry, pack_registry=pack_registry)
+    return resolver.resolve(
         project_type_id=project_type_id,
         selected_capability_ids=selected_capability_ids,
         stack_bundle_id=stack_bundle_id,
-        errors=errors,
+        execution_pack_id=execution_pack_id,
     )
 
 

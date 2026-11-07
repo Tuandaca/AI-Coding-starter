@@ -126,7 +126,7 @@ Each major proposal from the challenge was decided based on repository evidence.
 | D6 | Per-runtime Python files (`codex.py`, `opencode.py`, …) | **REJECT** | Adds per-runtime code surface; contradicts "catalog over hard-coded Python" and tool-agnostic principle. Replaced by declarative YAML adapters (D7). |
 | D7 | Declarative runtime adapter model (`runtime-capabilities.yaml` + `runtime-adapters/*.yaml` + generic renderer) | **KEEP (V2.0)** | Preferred by brief (Section 8); Agency Agents' `integrations/` + `scripts/convert.sh` (verified) show a working convert-once-to-many-runtimes model. |
 | D8 | Portable project state (`project.yaml` / `state.yaml` / `resources.lock`) | **KEEP (minimal)** | Verified problem #7. Markdown files are readable interfaces, not authority. Minimal file set. |
-| D9 | Agency Agents specialist catalog | **KEEP (V2.1)** | Curated coding specialists only (verified `divisions.json` + `runbooks.json`); never hundreds; normalized to small team model. Deferred to reduce V2.0 risk. |
+| D9 | Agency Agents specialist catalog | **KEEP (V2.1, M6.1/M6.2)** | Full Agency Agents catalog imported (18 divisions, 268 agents) into `catalog/agency-agents.yaml` via maintainer-side importer `scripts/sync_agency_agents.py`. Pinned upstream commit `b859c515d813efcfc4755d3471dd9e7686c7706d`, MIT license, full provenance. Project activation remains bounded (small active team per project) via the resolver; the full catalog is never loaded into a generated project. |
 | D10 | Agency execution/team packs | **KEEP (V2.1)** | Based on verified `strategy/runbooks.json` roster format (Core Team "always", others "as needed", activation conditions). Normalized, not blindly copied. |
 | D11 | Codebase Memory optional integration | **KEEP (V2.1, optional)** | First-class optional code intelligence (verified MIT). Must not duplicate CBM's install logic; transient worktree indexing policy required (Section 13). |
 | D12 | Agent-Reach optional research provider | **KEEP (V2.1, optional)** | Verified MIT; ordered provider/fallback model; read-only; auth requires explicit user action. Not a core dep. |
@@ -271,8 +271,8 @@ Agency resource import must NOT happen before the resource contract/catalog is s
 
 ## 14. Core Team vs Specialist Catalog
 
-- **Core Team** (small, always available): Project Planner/Architect, Backend Engineer, Frontend Engineer, QA/Code Reviewer. Normalized from Agency Agents `divisions.json` engineering/product/project-management divisions.
-- **Specialist Catalog** (activated on demand): curated coding-related specialists only (Software Architect, Database Optimizer, Identity & Access Engineer, Payments & Billing Engineer, Search Relevance Engineer, RAG Pipeline Engineer, Accessibility Specialist, SRE, Privacy Engineer). Never hundreds. Source: Agency Agents divisions, filtered to coding relevance, normalized to the small team model.
+- **Full Agency catalog** (knowledge base): all 268 agents from 18 Agency divisions imported into `catalog/agency-agents.yaml`. This is the canonical specialist knowledge base — it is NOT loaded into generated projects wholesale.
+- **Active team per project** (bounded): a small team (default 2-5 core + 0-5 specialists, hard ceiling 10) selected by the deterministic resolver based on project type, capabilities, and task. The full catalog is available for resolution but only the activated subset is written to `resources.lock`.
 
 No duplicate responsibility between core team and specialists.
 
@@ -282,24 +282,22 @@ No duplicate responsibility between core team and specialists.
 
 License: **MIT** (verified). Upstream: `msitarzewski/agency-agents`, default branch `main`.
 
-### 15.1 What will be integrated (V2.1, after catalog stable)
-- **Specialist catalog**: normalized from Agency `divisions.json` (engineering, product, project-management, security, testing, design) filtered to coding-related specialists; small set only.
-- **Execution/team packs**: modeled on `strategy/runbooks.json` roster format — `slug`, `title`, `mode`, `duration`, `summary`, `doc`, `roster` grouped by `group`/`activation` (`always`, `as needed`, `post-fix`, `week 3+`). Packs: `startup-mvp`, `production-feature`, `bug-fix`, `refactor`, `security-audit`, `performance-investigation`, `incident-fix`. Each pack defines core roles, optional roles, activation conditions, workflow, quality gates.
+### 15.1 What is integrated (V2.1, M6.1/M6.2)
+- **Full specialist catalog**: all 268 agents from 18 Agency divisions imported into `catalog/agency-agents.yaml` via the maintainer-side importer `scripts/sync_agency_agents.py`. Upstream slug (filename stem) preserved as canonical `id`. Each record carries full provenance: upstream repo, commit SHA, MIT license, import date, and SHA-256 content hash. Catalog is versioned separately from generated projects.
+- **Execution/team packs**: modeled on `strategy/runbooks.json` roster format — `slug`, `title`, `mode`, `duration`, `summary`, `doc`, `roster` grouped by `group`/`activation` (`always`, `as needed`, `post-fix`, `week 3+`). Packs: `startup-mvp`, `production-feature`, `bug-fix`, `refactor`, `security-audit`, `performance-investigation`, `incident-response`. Each pack defines core roles, optional roles, activation conditions, workflow, quality gates.
 
 ### 15.2 What only inspires architecture
 - `divisions.json` catalog metadata pattern (label/icon/color per division) → catalog metadata.
 - `integrations/` + `scripts/convert.sh` convert-once-to-many-runtimes → declarative runtime adapter model (Section 20).
 - Machine-readable runbooks (`strategy/runbooks.json`) → execution pack definition format.
 
-### 15.3 What is deferred
-- Full agent authoring content; importing all agents; loading hundreds of agents into generated projects.
+### 15.3 What is NOT done
+- Importing all agents into every generated project: the full catalog is the knowledge base; a project activates only a small bounded team (default <= 8, hard ceiling 10) selected by the resolver.
+- Blindly copying non-coding divisions: all 18 divisions are in the catalog, but the resolver selects only relevant specialists per project/task.
+- Any Agency code at runtime: agents are markdown definitions consumed by the starter, not runtime dependencies. No network access during end-user project generation.
 
-### 15.4 What is explicitly excluded
-- Blindly copying Agency rosters or non-coding divisions (marketing, sales, finance, healthcare, gis, spatial-computing, paid-media).
-- Any Agency code at runtime; agents are markdown definitions consumed by the starter, not runtime dependencies.
-
-### 15.5 Agency-ready contract requirement
-V2.0 does not require Agency Agents, but V2.0 architecture must be Agency-ready. M1–M5 contracts and schemas (portable project specification, runtime adapters, resolver interface) must be generic enough that M6 can later import and normalize Agency Agents without requiring a breaking redesign of the portable project specification or runtime architecture.
+### 15.4 Agency-ready contract requirement
+V2.0 does not require Agency Agents, but V2.0 architecture must be Agency-ready. M1–M5 contracts and schemas (portable project specification, runtime adapters, resolver interface) are generic enough that M6 can import and normalize Agency Agents without requiring a breaking redesign of the portable project specification or runtime architecture.
 
 ---
 

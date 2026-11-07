@@ -32,7 +32,7 @@ import shutil
 import sys
 import tempfile
 import unittest
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
@@ -108,13 +108,19 @@ class TestImportAndValidConfig(unittest.TestCase):
                 "DEFAULT_PROJECT_PATH": r"D:\Custom Projects",
             }))
             master, project = load_config_from(cfg)
+        # Config round-trip preservation (works on every OS).
         self.assertEqual(master, Path(r"D:\Deep\Nested\.agent"))
         self.assertEqual(project, Path(r"D:\Custom Projects"))
-        self.assertTrue(master.is_absolute())
-        self.assertTrue(project.is_absolute())
-        self.assertEqual(master.drive, "D:")
-        self.assertEqual(project.drive, "D:")
-        self.assertIn("\\", str(master))
+        # Windows path semantics — validate via PureWindowsPath so the test
+        # is meaningful on POSIX runners too (native Path(r"D:\...") is a
+        # relative POSIX path on POSIX).
+        win_master = PureWindowsPath(str(master))
+        win_project = PureWindowsPath(str(project))
+        self.assertTrue(win_master.is_absolute())
+        self.assertTrue(win_project.is_absolute())
+        self.assertEqual(win_master.drive, "D:")
+        self.assertEqual(win_project.drive, "D:")
+        self.assertIn("\\", str(win_master))
 
 
 class TestMissingConfig(unittest.TestCase):
