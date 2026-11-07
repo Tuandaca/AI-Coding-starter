@@ -28,10 +28,11 @@ jobs:
       - name: Compile production Python sources
         run: |
           python -c "
-import py_compile, pathlib
-files = list(pathlib.Path('.').rglob('*.py'))
-[py_compile.compile(str(f), doraise=True) for f in files]
-print(f'COMPILED {len(files)} files OK')
+          import py_compile, pathlib
+          files = list(pathlib.Path('.').rglob('*.py'))
+          [py_compile.compile(str(f), doraise=True) for f in files]
+          print(f'COMPILED {len(files)} files OK')
+          "
         shell: bash
 
       - name: Run test suite
