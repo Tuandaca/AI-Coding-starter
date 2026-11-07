@@ -684,7 +684,7 @@ Each milestone defines objective, why, dependencies, files expected to change, f
 ### Milestone M10 — Agent-Reach optional research provider (V2.1)
 - **Objective**: Integrate Agent-Reach as optional research provider using ordered provider/fallback/health pattern; explicit user action for authenticated channels.
 - **Why**: Section 23; Agent-Reach is MIT and offers ordered provider/fallback (architectural reference for Section 21); not a core dep.
-- **Dependencies**: M21 (provider registry design).
+- **Dependencies**: Section 21 (capability provider registry design, decision D5). There is no M21 milestone; the provider registry is a V2.0 design kept stable so M10 can register Agent-Reach as an optional provider in V2.1.
 - **Files expected to change**: Optional provider registration; no core change.
 - **Files that must not change**: Core resolver; portable state.
 - **Tasks**: Register `agent-reach` as research-web provider with fallback `runtime-native`; require explicit user action for authenticated channels; read-only; fail open if unavailable.

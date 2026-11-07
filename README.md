@@ -1,187 +1,137 @@
 # 🚀 AI Coding Starter
 
-> **VibeCoding** - Hệ thống AI Agent hỗ trợ lập trình với Antigravity IDE
+> **V2.0.1** — A portable, runtime-agnostic project bootstrapper for AI-assisted coding.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Made with ❤️](https://img.shields.io/badge/Made%20with-❤️-red.svg)](https://github.com)
 
 ---
 
-## ⚠️ Lưu ý quan trọng
+## What is AI-Coding-starter?
 
-Project này được xây dựng **dựa trên** [google-antigravity](https://github.com/Dokhacgiakhoa/google-antigravity) bởi **@Dokhacgiakhoa**.
+AI-Coding-starter creates new coding projects with a small, relevant team of AI resources (agents, skills, rules, workflows, scripts) and portable, machine-authoritative state. It is **runtime-agnostic**: the generated project carries `.ai-coding-starter/` state that any compatible coding runtime (Codex, OpenCode, Antigravity, Claude Code, Cursor, or a plain editor) can read and continue from — without project migration.
 
-**Tôi KHÔNG tạo ra hệ thống Agent gốc** - tôi chỉ đóng góp thêm:
-- 🎯 **Interactive Project Creator** - Wizard tạo dự án nhanh
-- 🛠️ **Tech Stack Presets** - 21+ presets công nghệ
-- 📋 **Context System** - AI nhớ context giữa sessions
-- 🚀 **Setup Script** - 1-click setup cho Windows/Mac/Linux
-
-Toàn bộ credit về Multi-Agent System, Skills, và Workflows thuộc về tác giả gốc.
+There is **no mandatory external template clone**, no network requirement, and no vendor lock-in. Generation works 100% offline from bundled, locally-authored resources.
 
 ---
 
-## 🔧 Cách hoạt động
+## Core architecture
+
+| Concept | Meaning |
+|---|---|
+| **Project type** | What you're building (portfolio, SaaS, fullstack, AI/RAG, …). |
+| **Capabilities** | What it needs (authentication, payments, AI, RAG, …), independent of vendor. |
+| **Stack bundle** | One coherent, validated technology combination (e.g. Next.js + Supabase). |
+| **Resource resolver** | Deterministically selects agents/skills/rules/workflows/scripts from type + capabilities + bundle. |
+| **Canonical state** | `.ai-coding-starter/project.yaml`, `state.yaml`, `resources.lock` — machine-authoritative and runtime-neutral. |
+| **Runtime adapters** | Declarative per-runtime instruction rendering (Codex, OpenCode, Antigravity, Claude Code, Cursor). |
+
+Generation flow (transactional — nothing is written until you confirm):
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  Bạn chạy: setup.bat                                        │
-│           ↓                                                 │
-│  Script tự động clone template từ:                          │
-│  https://github.com/Dokhacgiakhoa/google-antigravity        │
-│           ↓                                                 │
-│  Setup thêm các tools của repo này:                         │
-│  - new_project.py (Interactive wizard)                      │
-│  - Tech Stack Presets                                       │
-│  - Context System                                           │
-│           ↓                                                 │
-│  Bạn có thể tạo projects với: python new_project.py         │
-└─────────────────────────────────────────────────────────────┘
+COLLECT -> RESOLVE -> BUILD IN MEMORY -> PREVIEW -> CONFIRM -> WRITE
 ```
 
----
-
-## ✨ Tính năng
-
-### Từ [google-antigravity](https://github.com/Dokhacgiakhoa/google-antigravity) (Original):
-- 🤖 **Multi-Agent System** - Nhiều AI agents chuyên biệt
-- 📚 **Skill Library** - Thư viện skills đa dạng
-- 📂 **Shared Modules** - Database, API, Security standards
-
-### Tôi đóng góp thêm (This repo):
-- 🎯 **Project Types** - 7 loại dự án với config tối ưu
-- 🛠️ **Tech Stack Presets** - 21+ presets công nghệ phổ biến
-- 📋 **Context System** - AI nhớ context dự án giữa các sessions
-- 🚀 **Setup Script** - Tự động setup 1-click
+Canceling at confirmation writes **zero** project files.
 
 ---
 
-## 🚀 Cài đặt nhanh / Quick Setup
-
-### 🇺🇸 English Instructions
-
-1. **Clone this repository** (or download as ZIP and extract):
-    ```bash
-    git clone https://github.com/Tuandaca/AI-Coding-starter.git
-    cd AI-Coding-starter
-    ```
-
-2. **Run the Setup Wizard**:
-    - **Windows**: Double-click `setup.bat`. You can customize the workspace path and the master template URL during the setup.
-    - **Mac/Linux**: Run `./setup.sh` in the terminal.
-
-3. **Start the Tool**:
-    - **Windows**: After setup is complete, simply double-click the customized `NewPJ.bat` shortcut to instantly launch the beautiful interactive UI.
-    - You can also run it manually anywhere using `python new_project.py`.
-
-### 🇻🇳 Hướng dẫn Tiếng Việt
-
-1. **Tải mã nguồn này về** (Dùng lệnh git clone bên dưới hoặc tải file ZIP về giải nén):
-    ```bash
-    git clone https://github.com/Tuandaca/AI-Coding-starter.git
-    cd AI-Coding-starter
-    ```
-
-2. **Chạy trình Cài đặt (Setup Wizard)**:
-    - **Windows**: Nhấn đúp (Double-click) vào file `setup.bat`. Trình cài đặt sẽ cho phép bạn tự định nghĩa thư mục làm việc (mặc định ở ổ C) và tự động kéo hệ thống "Master Template" chứa các Agents. Nếu link tải Agent bị lỗi, script sẽ hỏi bạn nhập link dự phòng.
-    - **Mac/Linux**: Mở terminal, cấp quyền thực thi `chmod +x setup.sh` và chạy `./setup.sh`.
-
-3. **Khởi chạy Hệ thống**:
-    - **Windows**: Sau khi cài ráp thành công, thư mục sẽ xuất hiện 1 file tên là `NewPJ.bat`. Từ giờ mỗi khi cần tạo dự án, bạn chỉ việc bấm đúp vào file này, terminal sẽ được làm sạch tự động để hiện bảng chọn Agent rất trực quan.
-    - **Toàn bộ hệ điều hành**: Gọi thủ công bằng lệnh `python new_project.py`.
-
----
-
-## 📁 Cấu trúc thư mục
-
-```
-AI-Coding-starter/
-├── .agent/                  # AI Configuration (from original)
-│   ├── agents/              # AI Agent definitions
-│   ├── skills/              # Skill library
-│   ├── workflows/           # Workflow commands
-│   └── GEMINI.md            # Main AI config
-├── new_project.py           # ⭐ Interactive project creator (MY CONTRIBUTION)
-├── setup.bat                # ⭐ Windows setup (MY CONTRIBUTION)
-├── setup.sh                 # ⭐ Mac/Linux setup (MY CONTRIBUTION)
-└── README.md
-```
-
----
-
-## 🎮 Cách sử dụng
-
-### 1. Tạo dự án mới
+## Quick start
 
 ```bash
+# Clone or extract this repository
+git clone https://github.com/Tuandaca/AI-Coding-starter.git
+cd AI-Coding-starter
+
+# One-time setup (Windows or macOS/Linux)
+#   Windows: setup.bat
+#   macOS/Linux: ./setup.sh
+./setup.sh
+
+# Create a project
 python new_project.py
 ```
 
-Wizard sẽ hỏi:
-- Tên dự án
-- Đường dẫn
-- Loại dự án (7 types)
-- Tech Stack preset (21+ options)
-
-### 2. Mở project trong Antigravity IDE
-
-AI sẽ tự động đọc `.agent/GEMINI.md` và bắt đầu hỗ trợ!
+`setup.bat` / `setup.sh` detect Python, validate the bundled resources, and write `config.json` (no machine-specific absolute paths, no `sed` source mutation, no external template clone). They create a platform launcher (`NewPJ.bat` / `NewPJ.sh`) that runs `new_project.py` from the starter directory.
 
 ---
 
-## 🎯 Loại dự án hỗ trợ
+## Supported runtimes
 
-| Type | Mô tả | Tech Stack mặc định |
-|------|-------|---------------------|
-| 🌐 Personal Web | Portfolio, Landing page | Next.js + TailwindCSS |
-| 🛒 E-commerce | Online store | Next.js + Prisma + Stripe |
-| ☁️ SaaS | Software as a Service | Next.js + Supabase |
-| 📱 Mobile | iOS/Android apps | React Native + Expo |
-| 🎮 Game Dev | 2D/3D games | Phaser / Godot / Unity |
-| 🤖 AI/ML | AI applications | Python + FastAPI + LangChain |
-| 🔥 Full-Stack | Complete web app | Next.js + Prisma + PostgreSQL |
+The wizard lets you choose how project instructions are represented:
+
+| Runtime | Representation | Notes |
+|---|---|---|
+| Portable | `AGENTS.md` (root) only | Runtime-neutral, no runtime-specific files |
+| Codex | shared root `AGENTS.md` | Consumes portable instructions |
+| OpenCode | shared root `AGENTS.md` | Consumes portable instructions |
+| Antigravity | `.agent/GEMINI.md` | Runtime-owned, reversible |
+| Claude Code | `.claude/CLAUDE.md` | Project-local |
+| Cursor | `.cursor/AGENTS.md` | Project-local |
+
+Runtime switching reuses the same `.ai-coding-starter/project.yaml` state — it never mutates canonical project identity. Adapters fail open if a runtime is absent.
 
 ---
 
-## 📋 Context System
+## Project types, capabilities & stack bundles
 
-File `.agent/CONTEXT.md` giúp AI nhớ tiến độ dự án giữa các sessions.
+The catalog (`catalog/`) is machine-readable data, not hard-coded Python. The wizard shows capabilities relevant to your project type, then resolves **one** coherent stack bundle (no blind preset merging). The result is deterministic: identical input always yields identical resources.
 
-**Tip:** Cuối mỗi session, nói với AI:
+Example resolved teams (small, bounded):
+
+- **Portfolio**: frontend specialist, UI/UX & accessibility rules, SEO, QA
+- **SaaS**: frontend + backend + security + auth, database, deploy + monitoring
+- **Fullstack**: frontend + backend + database + QA + architecture
+- **AI/RAG**: AI engineer, backend, RAG tooling (mcp-builder), vector search
+
+A normal project receives a small team — never 20+ agents.
+
+---
+
+## Portable state
+
+Every generated project contains exactly one `.ai-coding-starter/`:
+
 ```
-Cập nhật CONTEXT.md với tiến độ hôm nay
+project/
+  .ai-coding-starter/
+    project.yaml     # machine-authoritative identity, type, capabilities, bundle
+    state.yaml       # workflow/session phase and focus
+    resources.lock   # selected resources + provenance + selection reasons
 ```
 
----
-
-## 🙏 Credits & Acknowledgments
-
-### Original Authors:
-- **[@Dokhacgiakhoa](https://github.com/Dokhacgiakhoa)** - Tác giả hệ thống [google-antigravity](https://github.com/Dokhacgiakhoa/google-antigravity)
-- Multi-Agent System, Skills, Workflows - Toàn bộ credit thuộc về tác giả gốc
-
-### This Repository:
-- **[@Tuandaca](https://github.com/Tuandaca)** - Interactive Project Creator, Tech Stack Presets, Context System, Setup Scripts
-
-### Tools Used:
-- [Antigravity IDE](https://antigravity.dev) - AI Coding IDE
+Derived, human-readable Markdown (`AGENTS.md`, `CONTEXT.md`, `DECISIONS.md`, `HANDOFF.md`) lives at the project root and is regenerated from canonical state; YAML always wins on conflict.
 
 ---
 
-## 🤝 Đóng góp
+## Migration (V1 → V2)
 
-Contributions are welcome! Hãy:
-1. Fork repo
-2. Tạo branch mới
-3. Commit changes
-4. Tạo Pull Request
+Existing V1 projects (`.agent/`, `GEMINI.md`, `CONTEXT.md`) are enhanced, never rewritten. The one-time migration is opt-in, confirmed by the user, non-destructive (only `.ai-coding-starter/` is written), and reversible (remove `.ai-coding-starter/` to restore V1 behavior).
 
 ---
 
-## 📄 License
+## Optional intelligence integrations
 
-MIT License - Xem file [LICENSE](LICENSE) để biết thêm chi tiết.
+Codebase Memory, Agent-Reach, and Orca are **optional and fail-optional** — they are never dependencies of project creation or portable state. Agency Agents concepts (specialist roles, skills, rules, runbooks/quality gates) informed the small bounded specialist set, but Agency Agents is not imported wholesale and is not a runtime dependency.
+
+No permission-bypass flags (`--yolo`, `--dangerously-skip-permissions`, `--dangerously-bypass-approvals-and-sandbox`) are ever used.
 
 ---
 
-**Made with ❤️ for Vietnamese Developer Community 🇻🇳**
+## Attribution & third-party notices
+
+- **AI-Coding-starter bundled resources**: locally authored, MIT (see `catalog/upstream-sources.yaml`, source `ai-coding-starter-bundled`).
+- **Agency Agents** (msitarzewski/agency-agents): MIT — architectural inspiration for specialist roles, skills, rules and runbooks; not imported into generated projects.
+- **Agent-Reach**, **Orca**, **Codebase Memory MCP**: MIT — optional external integrations only.
+- **OpenMontage**: AGPL-3.0 — architectural inspiration only (declarative manifests, approval gates); no source copied.
+
+See `THIRD_PARTY_NOTICES.md` and `catalog/upstream-sources.yaml` for full provenance, commit SHAs, and licenses.
+
+---
+
+## License
+
+MIT License — see [LICENSE](LICENSE).
+
+---
+
+**Made with ❤️ for the developer community** 🌍
