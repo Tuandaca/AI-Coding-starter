@@ -1933,6 +1933,29 @@ def main():
             else:
                 print_success(f"Runtime adapter '{runtime_id}' installed")
 
+            # Render selected agents for the chosen runtime (M6.6).
+            agents_data = []
+            for r in resource_selection.resources:
+                if r.type == "agent":
+                    agents_data.append({
+                        "id": r.id,
+                        "name": r.name,
+                        "description": r.description,
+                        "division": r.division,
+                        "body": r.description,
+                    })
+            if agents_data:
+                agent_render_result = renderer.render_agents(runtime_id, agents_data)
+                if not agent_render_result.ok:
+                    runtime_ok = False
+                    runtime_errors.extend(agent_render_result.errors)
+                    for err in agent_render_result.errors:
+                        print_error(err)
+                else:
+                    print_success(
+                        f"Rendered {len(agents_data)} agent(s) for {runtime_id}"
+                    )
+
     except Exception as exc:
         # Rollback: remove staging, never touch the target or user files.
         shutil.rmtree(staging, ignore_errors=True)

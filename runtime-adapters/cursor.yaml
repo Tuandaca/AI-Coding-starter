@@ -11,7 +11,20 @@
   },
   "config": [],
   "render": {
-    "outputs": []
+    "outputs": [],
+    "agents": {
+      "path_template": ".cursor/rules/{slug}.mdc",
+      "content_template": [
+        "---",
+        "description: {description}",
+        "globs: \"\"",
+        "alwaysApply: false",
+        "division: {division}",
+        "---",
+        "{body}"
+      ],
+      "mark_owned": true
+    }
   },
   "install": {
     "paths": []

@@ -13,7 +13,19 @@
     ".claude/settings.json"
   ],
   "render": {
-    "outputs": []
+    "outputs": [],
+    "agents": {
+      "path_template": ".claude/agents/{slug}.md",
+      "content_template": [
+        "---",
+        "name: {name}",
+        "description: {description}",
+        "division: {division}",
+        "---",
+        "{body}"
+      ],
+      "mark_owned": true
+    }
   },
   "install": {
     "paths": []

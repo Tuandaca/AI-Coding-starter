@@ -14,7 +14,20 @@
     ".opencode/opencode.jsonc"
   ],
   "render": {
-    "outputs": []
+    "outputs": [],
+    "agents": {
+      "path_template": ".opencode/agents/{slug}.md",
+      "content_template": [
+        "---",
+        "name: {name}",
+        "description: {description}",
+        "mode: subagent",
+        "division: {division}",
+        "---",
+        "{body}"
+      ],
+      "mark_owned": true
+    }
   },
   "install": {
     "paths": []

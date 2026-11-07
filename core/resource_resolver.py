@@ -115,6 +115,9 @@ class ResourceSelection:
     provenance_commit_sha: str = "8b61d297dc07772a000b85fc93138c8aefd21c45"
     provenance_license: str = "MIT"
     selection_reason: str = ""
+    name: str = ""
+    description: str = ""
+    division: str = ""
 
 
 @dataclass(frozen=True)
@@ -206,22 +209,10 @@ class ResourceResolver:
                     if key in seen:
                         continue
                     seen.add(key)
-                    ref = self.registry.get("agent", role_id)
-                    prov = ref.provenance if ref else {}
                     resources.append(
-                        ResourceSelection(
-                            id=role_id, type="agent", version="1.0.0",
-                            provenance_source="agency-agents"
-                            if (ref and ref.source == "agency-agents")
-                            else "bundled",
-                            provenance_commit_sha=prov.get(
-                                "upstream_commit",
-                                "8b61d297dc07772a000b85fc93138c8aefd21c45",
-                            ),
-                            provenance_license=prov.get("license", "MIT"),
-                            selection_reason=(
-                                f"execution-pack:{pack.id} core-role"
-                            ),
+                        self._make_selection(
+                            "agent", role_id,
+                            f"execution-pack:{pack.id} core-role",
                         )
                     )
 
@@ -246,23 +237,11 @@ class ResourceResolver:
                 if key in seen:
                     continue
                 seen.add(key)
-                ref = self.registry.get("agent", opt_role.resource_id)
-                prov = ref.provenance if ref else {}
                 resources.append(
-                    ResourceSelection(
-                        id=opt_role.resource_id, type="agent", version="1.0.0",
-                        provenance_source="agency-agents"
-                        if (ref and ref.source == "agency-agents")
-                        else "bundled",
-                        provenance_commit_sha=prov.get(
-                            "upstream_commit",
-                            "8b61d297dc07772a000b85fc93138c8aefd21c45",
-                        ),
-                        provenance_license=prov.get("license", "MIT"),
-                        selection_reason=(
-                            f"execution-pack:{pack.id} optional-role "
-                            f"({opt_role.activation})"
-                        ),
+                    self._make_selection(
+                        "agent", opt_role.resource_id,
+                        f"execution-pack:{pack.id} optional-role "
+                        f"({opt_role.activation})",
                     )
                 )
 
@@ -282,15 +261,7 @@ class ResourceResolver:
             if not self._registry_has(rtype, rid):
                 errors.append(f"Resource not found in registry: {rtype}:{rid}")
                 continue
-            resources.append(
-                ResourceSelection(
-                    id=rid, type=rtype, version="1.0.0",
-                    provenance_source="bundled",
-                    provenance_commit_sha="8b61d297dc07772a000b85fc93138c8aefd21c45",
-                    provenance_license="MIT",
-                    selection_reason=reason,
-                )
-            )
+            resources.append(self._make_selection(rtype, rid, reason))
 
         # --- 4. Capability-driven bundled resources -----------------------
         cap_to_resources = self._build_capability_map(pt_resources)
@@ -308,15 +279,7 @@ class ResourceResolver:
                     )
                     continue
                 seen.add(key)
-                resources.append(
-                    ResourceSelection(
-                        id=rid, type=rtype, version="1.0.0",
-                        provenance_source="bundled",
-                        provenance_commit_sha="8b61d297dc07772a000b85fc93138c8aefd21c45",
-                        provenance_license="MIT",
-                        selection_reason=defn["reason"],
-                    )
-                )
+                resources.append(self._make_selection(rtype, rid, defn["reason"]))
 
         # --- 5. Agency specialists relevant to project type --------------
         agency_agents = self._select_agency_specialists(project_type_id)
@@ -332,17 +295,7 @@ class ResourceResolver:
             seen.add(key)
             agent_count += 1
             reason = f"agency-division:{agent.division} relevance to project-type:{project_type_id}"
-            resources.append(
-                ResourceSelection(
-                    id=agent.id, type="agent", version="1.0.0",
-                    provenance_source="agency-agents",
-                    provenance_commit_sha=agent.provenance.get(
-                        "upstream_commit", "8b61d297dc07772a000b85fc93138c8aefd21c45"
-                    ),
-                    provenance_license=agent.provenance.get("license", "MIT"),
-                    selection_reason=reason,
-                )
-            )
+            resources.append(self._make_selection("agent", agent.id, reason))
 
         # --- 6. Enforce team size ceiling ---------------------------------
         if agent_count > HARD_TEAM_CEILING:
@@ -423,6 +376,30 @@ class ResourceResolver:
                 candidates.append(agent)
         candidates.sort(key=lambda a: a.id)
         return candidates[:SPECIALIST_MAX]
+
+    def _make_selection(
+        self,
+        rtype: str,
+        rid: str,
+        reason: str,
+    ) -> ResourceSelection:
+        """Build a ResourceSelection, populating name/description + provenance
+        from the registry ref (falls back to bundled defaults when ref absent)."""
+        DEFAULT_SHA = "8b61d297dc07772a000b85fc93138c8aefd21c45"
+        ref = self.registry.get(rtype, rid)
+        prov = ref.provenance if ref else {}
+        return ResourceSelection(
+            id=rid,
+            type=rtype,
+            version="1.0.0",
+            provenance_source=prov.get("source", "bundled"),
+            provenance_commit_sha=prov.get("upstream_commit", DEFAULT_SHA),
+            provenance_license=prov.get("license", "MIT"),
+            selection_reason=reason,
+            name=(ref.name if ref else rid),
+            description=(ref.description if ref else ""),
+            division=(ref.division if ref else ""),
+        )
 
 
 # Backward-compatible module-level API (M5/M7).

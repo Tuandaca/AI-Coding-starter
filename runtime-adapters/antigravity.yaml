@@ -37,7 +37,18 @@
         ],
         "mark_owned": true
       }
-    ]
+    ],
+    "agents": {
+      "path_template": ".agent/skills/{slug}/SKILL.md",
+      "content_template": [
+        "---",
+        "name: {slug}",
+        "description: {description}",
+        "---",
+        "{body}"
+      ],
+      "mark_owned": true
+    }
   },
   "install": {
     "paths": [
