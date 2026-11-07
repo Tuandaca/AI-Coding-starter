@@ -172,9 +172,44 @@ BUNDLE_TEMPLATES: dict[str, dict[str, str]] = {
     "react-static": {**REACT_STATIC_FILES, **REACT_STATIC_CONFIG_FILES},
 }
 
+# Declared scaffold support level per stack bundle (Section 20).
+#
+# "full"        -> functional code scaffold generated from offline templates.
+# "minimal"     -> only project metadata, no source files.
+# "metadata-only" -> no code scaffold; the bundle is resolved for selection
+#                    but the generated project contains no stack source code.
+SCAFFOLD_SUPPORT: dict[str, str] = {
+    "react-static": "full",
+    "nextjs-supabase": "metadata-only",
+    "expo-supabase-mobile": "metadata-only",
+    "nextjs-dotnet-postgres": "metadata-only",
+    "fastapi-postgres": "metadata-only",
+    "ai-rag-python": "metadata-only",
+    "dotnet-postgres": "metadata-only",
+    "tauri-react-sqlite": "metadata-only",
+    "nestjs-postgres": "metadata-only",
+    "nextjs-vercel": "metadata-only",
+    "vue-lite": "metadata-only",
+}
+
+
+def scaffold_support_for(bundle_id: str) -> str:
+    """Return the declared scaffold support level for a bundle.
+
+    Defaults to ``metadata-only`` for bundles without an explicit declaration
+    (Section 20: do not pretend a stack has a full scaffold when it does not).
+    """
+    return SCAFFOLD_SUPPORT.get(bundle_id, "metadata-only")
+
 
 def scaffold_files(bundle_id: str, project_name: str) -> dict[str, str]:
-    """Return the scaffold file map for a bundle, with project name substituted."""
+    """Return the scaffold file map for a bundle, with project name substituted.
+
+    Returns an empty map for bundles without a full scaffold
+    (``metadata-only`` / ``minimal``).
+    """
+    if scaffold_support_for(bundle_id) != "full":
+        return {}
     templates = BUNDLE_TEMPLATES.get(bundle_id, {})
     out: dict[str, str] = {}
     for rel_path, content in templates.items():
