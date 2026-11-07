@@ -184,8 +184,10 @@ class GenericRenderer:
 
         candidates = []
         if self.adapters_dir:
+            # Resolve adapters from the trusted installation root
+            # (adapters_dir), never from the current working directory.
+            # CF-3: runtime adapter lookup must not depend on CWD.
             candidates.append(self.project_root / self.adapters_dir / f"{runtime_id}.yaml")
-            candidates.append(Path.cwd() / self.adapters_dir / f"{runtime_id}.yaml")
         candidates.append(self.project_root / f"{runtime_id}.yaml")
 
         for path in candidates:
@@ -716,6 +718,163 @@ class GenericRenderer:
                 runtimes[runtime_id] = {
                     "installed_at": self._utc_now(),
                     "outputs": outputs_rel,
+                }
+                self.state_dir.mkdir(parents=True, exist_ok=True)
+                self._write_manifest(manifest)
+                manifest_updated = True
+            except OSError as exc:
+                errors.append(f"Failed to update runtime manifest: {exc}")
+
+        return RenderResult(
+            ok=not errors,
+            runtime_id=runtime_id,
+            written=written,
+            errors=errors,
+            manifest_updated=manifest_updated,
+        )
+
+    def render_agents(
+        self,
+        runtime_id: str,
+        agents: list[dict],
+    ) -> RenderResult:
+        """
+        Render per-agent runtime-native files for selected agents.
+
+        Reads ``adapter.render.agents`` for ``path_template`` and
+        ``content_template``. Writes one file per agent into the project root,
+        using placeholders {slug}, {name}, {description}, {division}, {body}.
+
+        Fail-open: returns ``RenderResult(ok=False, ...)`` on any failure;
+        canonical files are never modified.
+        """
+        errors: list[str] = []
+        written: list[Path] = []
+
+        adapter = self.load_adapter(runtime_id)
+        if adapter is None:
+            return RenderResult(
+                False,
+                runtime_id,
+                [],
+                [f"Runtime adapter not found or malformed: {runtime_id}"],
+                False,
+            )
+
+        validation = self.validate_adapter(adapter)
+        if not validation.is_valid:
+            return RenderResult(
+                False,
+                runtime_id,
+                [],
+                [str(error) for error in validation.errors],
+                False,
+            )
+
+        agents_block = adapter.get("render", {}).get("agents")
+        if not isinstance(agents_block, dict):
+            return RenderResult(
+                False,
+                runtime_id,
+                [],
+                [
+                    f"Runtime adapter '{runtime_id}' has no render.agents block"
+                ],
+                False,
+            )
+
+        path_template = agents_block.get("path_template", "")
+        content_template = agents_block.get("content_template", [])
+        mark_owned = agents_block.get("mark_owned", True)
+
+        root = self.project_root.resolve()
+
+        for agent in agents:
+            if not isinstance(agent, dict):
+                errors.append("agent entry is not an object")
+                continue
+            slug = str(agent.get("id", ""))
+            name = str(agent.get("name", ""))
+            description = str(agent.get("description", ""))
+            division = str(agent.get("division", ""))
+            body = str(agent.get("body", description))
+
+            if not slug:
+                errors.append("agent entry missing 'id'")
+                continue
+
+            # Resolve output path from template.
+            agent_ctx = {
+                "slug": slug,
+                "name": name,
+                "description": description,
+                "division": division,
+                "body": body,
+            }
+            try:
+                rel_path = path_template.format(**agent_ctx)
+            except KeyError as exc:
+                errors.append(
+                    f"render.agents path_template has unknown placeholder: {exc}"
+                )
+                continue
+            try:
+                safe_path = self._safe_output_path(rel_path)
+            except UnsafePathError as exc:
+                errors.append(f"Unsafe agent output path {rel_path!r}: {exc}")
+                continue
+            try:
+                rel_to_root = safe_path.relative_to(root)
+            except ValueError:
+                errors.append(f"Agent output path escapes project root: {rel_path}")
+                continue
+            if rel_to_root.name in CANONICAL_FILES:
+                errors.append(
+                    f"Refusing to write canonical file: {rel_to_root.as_posix()}"
+                )
+                continue
+
+            # Render content template.
+            try:
+                content = self._render_template(content_template, agent_ctx)
+            except Exception as exc:
+                errors.append(f"Failed to render agent template for {slug}: {exc}")
+                continue
+
+            dangerous = [flag for flag in DANGEROUS_FLAGS if flag in content]
+            if dangerous:
+                errors.append(
+                    f"Refusing to write agent {slug}: dangerous permission flags "
+                    f"detected: {', '.join(dangerous)}"
+                )
+                continue
+
+            if mark_owned:
+                content = self._marker(runtime_id) + "\n" + content
+
+            try:
+                safe_path.parent.mkdir(parents=True, exist_ok=True)
+                safe_path.write_text(content, encoding="utf-8")
+                written.append(safe_path)
+            except OSError as exc:
+                errors.append(f"Failed to write agent {slug}: {exc}")
+
+        manifest_updated = False
+        if written:
+            try:
+                manifest = self._read_manifest()
+                runtimes = manifest.setdefault("runtimes", {})
+                outputs_rel = [
+                    str(p.relative_to(root).as_posix()) for p in written
+                ]
+                existing = runtimes.get(runtime_id, {})
+                if not isinstance(existing, dict):
+                    existing = {}
+                existing_outputs = list(existing.get("outputs", []))
+                existing_outputs.extend(outputs_rel)
+                runtimes[runtime_id] = {
+                    "installed_at": self._utc_now(),
+                    "outputs": existing_outputs,
                 }
                 self.state_dir.mkdir(parents=True, exist_ok=True)
                 self._write_manifest(manifest)

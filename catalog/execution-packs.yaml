@@ -1,0 +1,519 @@
+{
+  "schema_version": "1.0.0",
+  "catalog_version": "2026-11-07-1",
+  "imported_date": "2026-11-07",
+  "source": "ai-coding-starter-native",
+  "license": "MIT",
+  "execution_packs": [
+    {
+      "id": "startup-mvp",
+      "name": "Startup MVP Build",
+      "description": "Idea to live product with real users, fast — without skipping QA. Modeled on Agency runbook startup-mvp.",
+      "mode": "continuous",
+      "duration": "4-6 weeks",
+      "summary": "Ship a minimal viable product with a small core team; growth and support specialists activate on demand.",
+      "doc": "strategy/runbooks/scenario-startup-mvp.md",
+      "upstream": "agency-agents",
+      "upstream_commit": "b859c515d813efcfc4755d3471dd9e7686c7706d",
+      "core_roles": [
+        "agents-orchestrator",
+        "project-manager-senior",
+        "product-sprint-prioritizer",
+        "design-ux-architect",
+        "engineering-frontend-developer",
+        "engineering-backend-architect",
+        "engineering-devops-automator",
+        "testing-evidence-collector",
+        "testing-reality-checker"
+      ],
+      "optional_roles": [
+        {
+          "resource_id": "marketing-growth-hacker",
+          "activation": "as-needed",
+          "trigger_capabilities": ["marketing", "growth"],
+          "trigger_stack_bundles": []
+        },
+        {
+          "resource_id": "marketing-content-creator",
+          "activation": "as-needed",
+          "trigger_capabilities": ["content", "marketing"],
+          "trigger_stack_bundles": []
+        },
+        {
+          "resource_id": "support-analytics-reporter",
+          "activation": "as-needed",
+          "trigger_capabilities": ["analytics"],
+          "trigger_stack_bundles": []
+        }
+      ],
+      "activation_conditions": {
+        "project_types": ["saas", "fullstack-application", "ai-rag", "ai-agent"],
+        "capabilities": [],
+        "stack_bundles": []
+      },
+      "quality_gates": [
+        "Core team roles all present",
+        "No duplicate responsibility among agents",
+        "Total agent count <= hard ceiling (10)"
+      ],
+      "workflow": [
+        "discover",
+        "plan",
+        "build",
+        "test",
+        "deploy",
+        "review"
+      ]
+    },
+    {
+      "id": "enterprise-feature",
+      "name": "Enterprise Feature Development",
+      "description": "Ship a major feature into an existing enterprise product with compliance, security, and quality gates. Modeled on Agency runbook enterprise-feature.",
+      "mode": "continuous",
+      "duration": "6-12 weeks",
+      "summary": "Large core team with QA, compliance, and governance specialists activated as needed.",
+      "doc": "strategy/runbooks/scenario-enterprise-feature.md",
+      "upstream": "agency-agents",
+      "upstream_commit": "b859c515d813efcfc4755d3471dd9e7686c7706d",
+      "core_roles": [
+        "agents-orchestrator",
+        "project-management-project-shepherd",
+        "project-manager-senior",
+        "product-sprint-prioritizer",
+        "design-ux-architect",
+        "design-ux-researcher",
+        "design-ui-designer",
+        "engineering-frontend-developer",
+        "engineering-backend-architect",
+        "engineering-senior-developer",
+        "engineering-devops-automator",
+        "testing-evidence-collector",
+        "testing-api-tester",
+        "testing-reality-checker",
+        "testing-performance-benchmarker"
+      ],
+      "optional_roles": [
+        {
+          "resource_id": "support-legal-compliance-checker",
+          "activation": "as-needed",
+          "trigger_capabilities": ["compliance", "legal"],
+          "trigger_stack_bundles": []
+        },
+        {
+          "resource_id": "design-brand-guardian",
+          "activation": "as-needed",
+          "trigger_capabilities": ["brand", "design"],
+          "trigger_stack_bundles": []
+        },
+        {
+          "resource_id": "support-finance-tracker",
+          "activation": "as-needed",
+          "trigger_capabilities": ["payments", "billing"],
+          "trigger_stack_bundles": []
+        }
+      ],
+      "activation_conditions": {
+        "project_types": ["saas", "enterprise", "fullstack-application"],
+        "capabilities": ["authentication", "authorization"],
+        "stack_bundles": []
+      },
+      "quality_gates": [
+        "Core team roles all present",
+        "Compliance reviewer present when authentication capability active",
+        "Total agent count <= hard ceiling (10)"
+      ],
+      "workflow": [
+        "discover",
+        "specify",
+        "design",
+        "implement",
+        "test",
+        "review",
+        "deploy",
+        "audit"
+      ]
+    },
+    {
+      "id": "marketing-campaign",
+      "name": "Multi-Channel Marketing Campaign",
+      "description": "Launch a coordinated, brand-consistent campaign across channels. Modeled on Agency runbook marketing-campaign.",
+      "mode": "time-boxed",
+      "duration": "2-4 weeks",
+      "summary": "Small campaign core team with platform specialists activated as needed.",
+      "doc": "strategy/runbooks/scenario-marketing-campaign.md",
+      "upstream": "agency-agents",
+      "upstream_commit": "b859c515d813efcfc4755d3471dd9e7686c7706d",
+      "core_roles": [
+        "marketing-social-media-strategist",
+        "marketing-content-creator",
+        "marketing-growth-hacker",
+        "design-brand-guardian",
+        "support-analytics-reporter"
+      ],
+      "optional_roles": [
+        {
+          "resource_id": "marketing-seo-specialist",
+          "activation": "as-needed",
+          "trigger_capabilities": ["seo", "search"],
+          "trigger_stack_bundles": []
+        },
+        {
+          "resource_id": "marketing-email-strategist",
+          "activation": "as-needed",
+          "trigger_capabilities": ["email"],
+          "trigger_stack_bundles": []
+        }
+      ],
+      "activation_conditions": {
+        "project_types": ["landing-page", "business-website", "saas"],
+        "capabilities": ["marketing"],
+        "stack_bundles": []
+      },
+      "quality_gates": [
+        "Brand guardian present",
+        "Analytics reporter present",
+        "Total agent count <= hard ceiling (10)"
+      ],
+      "workflow": [
+        "strategy",
+        "create",
+        "distribute",
+        "measure",
+        "optimize"
+      ]
+    },
+    {
+      "id": "incident-response",
+      "name": "Incident Response",
+      "description": "Detection through post-mortem for a production incident. Modeled on Agency runbook incident-response.",
+      "mode": "event-driven",
+      "duration": "Minutes to hours",
+      "summary": "Micro critical-response team with verification and post-mortem specialists.",
+      "doc": "strategy/runbooks/scenario-incident-response.md",
+      "upstream": "agency-agents",
+      "upstream_commit": "b859c515d813efcfc4755d3471dd9e7686c7706d",
+      "core_roles": [
+        "support-infrastructure-maintainer",
+        "engineering-devops-automator",
+        "engineering-backend-architect",
+        "engineering-frontend-developer",
+        "support-support-responder",
+        "support-executive-summary-generator"
+      ],
+      "optional_roles": [
+        {
+          "resource_id": "testing-api-tester",
+          "activation": "post-fix",
+          "trigger_capabilities": [],
+          "trigger_stack_bundles": []
+        },
+        {
+          "resource_id": "testing-workflow-optimizer",
+          "activation": "post-fix",
+          "trigger_capabilities": [],
+          "trigger_stack_bundles": []
+        }
+      ],
+      "activation_conditions": {
+        "project_types": ["saas", "fullstack-application", "backend-api"],
+        "capabilities": [],
+        "stack_bundles": []
+      },
+      "quality_gates": [
+        "Critical response team all present",
+        "Post-mortem specialists activated after fix",
+        "Total agent count <= hard ceiling (10)"
+      ],
+      "workflow": [
+        "detect",
+        "respond",
+        "stabilize",
+        "post-mortem",
+        "prevent"
+      ]
+    },
+    {
+      "id": "feature-development",
+      "name": "Feature Development",
+      "description": "AI-Coding-starter native pack for developing a new product feature end-to-end.",
+      "mode": "continuous",
+      "duration": "ongoing",
+      "summary": "Small core team for feature delivery; senior and devops specialists activate on capability triggers.",
+      "core_roles": [
+        "project-planner",
+        "orchestrator",
+        "engineering-frontend-developer",
+        "engineering-backend-architect",
+        "testing-evidence-collector"
+      ],
+      "optional_roles": [
+        {
+          "resource_id": "engineering-senior-developer",
+          "activation": "capability-triggered",
+          "trigger_capabilities": ["backend", "frontend"],
+          "trigger_stack_bundles": []
+        },
+        {
+          "resource_id": "engineering-devops-automator",
+          "activation": "stack-triggered",
+          "trigger_capabilities": [],
+          "trigger_stack_bundles": ["nextjs-supabase", "fastapi-postgres"]
+        },
+        {
+          "resource_id": "design-ui-designer",
+          "activation": "capability-triggered",
+          "trigger_capabilities": ["ui", "ux"],
+          "trigger_stack_bundles": []
+        }
+      ],
+      "activation_conditions": {
+        "project_types": ["saas", "fullstack-application", "web-application"],
+        "capabilities": [],
+        "stack_bundles": []
+      },
+      "quality_gates": [
+        "Core team roles all present",
+        "At least one testing agent present",
+        "Total agent count <= hard ceiling (10)"
+      ],
+      "workflow": [
+        "plan",
+        "design",
+        "implement",
+        "test",
+        "review",
+        "ship"
+      ]
+    },
+    {
+      "id": "bug-fix",
+      "name": "Bug Fix",
+      "description": "AI-Coding-starter native pack for diagnosing and fixing a defect.",
+      "mode": "time-boxed",
+      "duration": "days",
+      "summary": "Minimal core team focused on root-cause analysis and verification.",
+      "core_roles": [
+        "project-planner",
+        "engineering-senior-developer",
+        "testing-evidence-collector"
+      ],
+      "optional_roles": [
+        {
+          "resource_id": "engineering-code-reviewer",
+          "activation": "stack-triggered",
+          "trigger_capabilities": [],
+          "trigger_stack_bundles": []
+        },
+        {
+          "resource_id": "security-auditor",
+          "activation": "capability-triggered",
+          "trigger_capabilities": ["security", "authentication"],
+          "trigger_stack_bundles": []
+        }
+      ],
+      "activation_conditions": {
+        "project_types": ["saas", "fullstack-application", "backend-api"],
+        "capabilities": [],
+        "stack_bundles": []
+      },
+      "quality_gates": [
+        "Core team roles all present",
+        "At least one testing agent present",
+        "Total agent count <= hard ceiling (10)"
+      ],
+      "workflow": [
+        "reproduce",
+        "diagnose",
+        "fix",
+        "verify",
+        "ship"
+      ]
+    },
+    {
+      "id": "refactor",
+      "name": "Refactor",
+      "description": "AI-Coding-starter native pack for improving code structure without changing behavior.",
+      "mode": "continuous",
+      "duration": "ongoing",
+      "summary": "Core team focused on code quality; architect activates on complexity triggers.",
+      "core_roles": [
+        "project-planner",
+        "engineering-senior-developer",
+        "engineering-code-reviewer"
+      ],
+      "optional_roles": [
+        {
+          "resource_id": "engineering-software-architect",
+          "activation": "capability-triggered",
+          "trigger_capabilities": ["architecture", "design"],
+          "trigger_stack_bundles": []
+        }
+      ],
+      "activation_conditions": {
+        "project_types": ["saas", "fullstack-application", "backend-api"],
+        "capabilities": [],
+        "stack_bundles": []
+      },
+      "quality_gates": [
+        "Core team roles all present",
+        "Code reviewer present",
+        "Total agent count <= hard ceiling (10)"
+      ],
+      "workflow": [
+        "analyze",
+        "refactor",
+        "test",
+        "verify"
+      ]
+    },
+    {
+      "id": "code-review",
+      "name": "Code Review",
+      "description": "AI-Coding-starter native pack for reviewing pull requests and code changes.",
+      "mode": "event-driven",
+      "duration": "hours",
+      "summary": "Reviewer-led team with security specialist on security-related changes.",
+      "core_roles": [
+        "engineering-code-reviewer",
+        "engineering-senior-developer"
+      ],
+      "optional_roles": [
+        {
+          "resource_id": "security-appsec-engineer",
+          "activation": "capability-triggered",
+          "trigger_capabilities": ["security"],
+          "trigger_stack_bundles": []
+        }
+      ],
+      "activation_conditions": {
+        "project_types": ["saas", "fullstack-application", "backend-api"],
+        "capabilities": [],
+        "stack_bundles": []
+      },
+      "quality_gates": [
+        "Code reviewer present",
+        "Senior developer present",
+        "Total agent count <= hard ceiling (10)"
+      ],
+      "workflow": [
+        "review",
+        "comment",
+        "approve-or-request-changes"
+      ]
+    },
+    {
+      "id": "security-audit",
+      "name": "Security Audit",
+      "description": "AI-Coding-starter native pack for security review and vulnerability assessment.",
+      "mode": "time-boxed",
+      "duration": "1-2 weeks",
+      "summary": "Security-led audit team with appsec, cloud, and compliance coverage.",
+      "core_roles": [
+        "security-appsec-engineer",
+        "security-cloud-security-architect",
+        "security-compliance-auditor"
+      ],
+      "optional_roles": [
+        {
+          "resource_id": "security-penetration-tester",
+          "activation": "capability-triggered",
+          "trigger_capabilities": ["penetration-testing"],
+          "trigger_stack_bundles": []
+        }
+      ],
+      "activation_conditions": {
+        "project_types": ["saas", "e-commerce", "backend-api", "fullstack-application"],
+        "capabilities": ["authentication", "authorization", "payments"],
+        "stack_bundles": []
+      },
+      "quality_gates": [
+        "Core team roles all present",
+        "Appsec engineer present",
+        "Total agent count <= hard ceiling (10)"
+      ],
+      "workflow": [
+        "scope",
+        "assess",
+        "test",
+        "report",
+        "remediate"
+      ]
+    },
+    {
+      "id": "performance-investigation",
+      "name": "Performance Investigation",
+      "description": "AI-Coding-starter native pack for diagnosing and resolving performance issues.",
+      "mode": "time-boxed",
+      "duration": "1 week",
+      "summary": "Performance-led team with backend and testing coverage.",
+      "core_roles": [
+        "engineering-sre",
+        "testing-performance-benchmarker",
+        "engineering-backend-architect"
+      ],
+      "optional_roles": [
+        {
+          "resource_id": "engineering-devops-automator",
+          "activation": "stack-triggered",
+          "trigger_capabilities": [],
+          "trigger_stack_bundles": ["nextjs-supabase", "fastapi-postgres"]
+        }
+      ],
+      "activation_conditions": {
+        "project_types": ["saas", "fullstack-application", "backend-api", "realtime-application"],
+        "capabilities": [],
+        "stack_bundles": []
+      },
+      "quality_gates": [
+        "Core team roles all present",
+        "Performance benchmarker present",
+        "Total agent count <= hard ceiling (10)"
+      ],
+      "workflow": [
+        "measure",
+        "analyze",
+        "optimize",
+        "verify"
+      ]
+    },
+    {
+      "id": "ai-rag-development",
+      "name": "AI RAG Development",
+      "description": "AI-Coding-starter native pack for building retrieval-augmented generation applications.",
+      "mode": "continuous",
+      "duration": "ongoing",
+      "summary": "RAG pipeline engineer and AI engineer with backend and testing support.",
+      "core_roles": [
+        "engineering-rag-pipeline-engineer",
+        "engineering-ai-engineer",
+        "testing-evidence-collector",
+        "engineering-backend-architect"
+      ],
+      "optional_roles": [
+        {
+          "resource_id": "engineering-search-relevance-engineer",
+          "activation": "capability-triggered",
+          "trigger_capabilities": ["search", "vector-search"],
+          "trigger_stack_bundles": []
+        }
+      ],
+      "activation_conditions": {
+        "project_types": ["ai-rag", "ai-agent"],
+        "capabilities": ["ai", "rag"],
+        "stack_bundles": []
+      },
+      "quality_gates": [
+        "Core team roles all present",
+        "RAG pipeline engineer present",
+        "Total agent count <= hard ceiling (10)"
+      ],
+      "workflow": [
+        "ingest",
+        "index",
+        "retrieve",
+        "generate",
+        "evaluate"
+      ]
+    }
+  ]
+}

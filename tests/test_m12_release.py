@@ -136,12 +136,12 @@ class TestReleaseInvariant(unittest.TestCase):
         self.assertIn("Refusing to write", generic_renderer)
 
     def test_optional_integrations_absent_by_default(self):
-        """Agency, Agent-Reach, Orca, Codebase Memory must not import
-        resources by default."""
+        """Agent-Reach, Orca, Codebase Memory must not import
+        resources by default. Agency Agents is an imported catalog."""
         with open(CATALOG_FILE, "r", encoding="utf-8") as handle:
             catalog = json.load(handle)
         for source in catalog["sources"]:
-            if source["id"] in ("agency-agents", "agent-reach", "orca",
+            if source["id"] in ("agent-reach", "orca",
                                 "codebase-memory-mcp"):
                 self.assertEqual(source["selected_resource_ids"], [],
                                  f"{source['id']} must not import "
