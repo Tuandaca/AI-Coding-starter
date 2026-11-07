@@ -1,13 +1,15 @@
 """
 Resource resolver for AI-Coding-starter V2 Milestone M12 / M6.3-M6.4.
 
-Resolves project type + capabilities + stack bundle to a bounded set of
-resource selections (id, type, version, provenance, selection_reason).
+Resolves project type + capabilities + stack bundle (+ optional execution
+pack) to a bounded set of resource selections (id, type, version,
+provenance, selection_reason).
 
 Architecture:
-    project type ID + capabilities + stack bundle ID
+    project type ID + capabilities + stack bundle ID [+ execution pack]
             ↓
     ResourceRegistry  (bundled + agency-agents canonical resources)
+    ExecutionPackRegistry  (validated execution packs)
             ↓
     ResourceResolver  (deterministic, bounded team selection)
             ↓
@@ -30,11 +32,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from core.domain.contracts.id_policy import is_valid_id
 from core.resource_registry import (
     ResourceCatalogLoader,
     ResourceRegistry,
     build_default_registry,
+)
+from core.execution_pack_registry import (
+    ExecutionPackRegistry,
+    build_default_pack_registry,
 )
 
 # Canonical location of the resource requirements catalog relative to this module.
@@ -120,6 +125,7 @@ class ResourceSelectionResult:
     project_type_id: str = ""
     selected_capability_ids: list[str] = field(default_factory=list)
     stack_bundle_id: str = ""
+    execution_pack_id: Optional[str] = None
     errors: list[str] = field(default_factory=list)
 
     @property
@@ -137,29 +143,46 @@ class ResourceResolver:
 
     Selects a small active team from the full canonical registry
     (bundled + agency-agents). Never activates the entire catalog.
+
+    Resolution priority (§12):
+      1. Execution pack core roles (highest priority)
+      2. Project-type-relevant bundled resources
+      3. Capability-driven bundled resources
+      4. Agency specialists relevant to project type (division match)
+      5. Quality/safety roles (implied by capabilities)
+
+    Team size policy (§13):
+      Core 2-5 agents, specialists 0-5 agents, total <= 8,
+      hard ceiling 10 agents.
     """
 
-    def __init__(self, registry: ResourceRegistry) -> None:
+    def __init__(
+        self,
+        registry: ResourceRegistry,
+        pack_registry: Optional[ExecutionPackRegistry] = None,
+    ) -> None:
         self.registry = registry
+        self.pack_registry = pack_registry
 
     def resolve(
         self,
         project_type_id: str,
         selected_capability_ids: list[str],
         stack_bundle_id: str,
+        execution_pack_id: Optional[str] = None,
     ) -> ResourceSelectionResult:
         """Resolve to a bounded resource selection.
 
-        Resolution priority:
-          1. Project-type-relevant bundled resources (from
-             catalog/resource-requirements.yaml).
-          2. Capability-driven bundled resources.
-          3. Agency specialists relevant to the project type (division match).
-          4. Quality/safety roles (security-auditor) when implied by
-             capabilities.
+        Args:
+            project_type_id: Canonical project type ID.
+            selected_capability_ids: Canonical capability IDs chosen by user.
+            stack_bundle_id: Canonical stack bundle ID.
+            execution_pack_id: Optional execution pack slug. When given, its
+                core roles are activated first (highest priority).
 
-        Team size policy: core 2-5, specialists 0-5, total <= 8,
-        hard ceiling 10.
+        Returns:
+            ResourceSelectionResult with bounded resources and selection
+            reasons.
         """
         errors: list[str] = []
         resources: list[ResourceSelection] = []
@@ -167,8 +190,83 @@ class ResourceResolver:
 
         project_type_id = str(project_type_id or "")
         selected_caps = sorted({str(c) for c in (selected_capability_ids or [])})
+        stack_bundle_id = str(stack_bundle_id or "")
 
-        # --- 1. Project-type-relevant bundled resources --------------------
+        # --- 1. Execution pack core roles (highest priority) --------------
+        pack = None
+        if execution_pack_id is not None and self.pack_registry is not None:
+            pack = self.pack_registry.get(execution_pack_id)
+            if pack is None:
+                errors.append(
+                    f"Execution pack not found: {execution_pack_id!r}"
+                )
+            else:
+                for role_id in pack.core_roles:
+                    key = ("agent", role_id)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    ref = self.registry.get("agent", role_id)
+                    prov = ref.provenance if ref else {}
+                    resources.append(
+                        ResourceSelection(
+                            id=role_id, type="agent", version="1.0.0",
+                            provenance_source="agency-agents"
+                            if (ref and ref.source == "agency-agents")
+                            else "bundled",
+                            provenance_commit_sha=prov.get(
+                                "upstream_commit",
+                                "8b61d297dc07772a000b85fc93138c8aefd21c45",
+                            ),
+                            provenance_license=prov.get("license", "MIT"),
+                            selection_reason=(
+                                f"execution-pack:{pack.id} core-role"
+                            ),
+                        )
+                    )
+
+        # --- 2. Execution pack optional roles (trigger-matched) -----------
+        if pack is not None:
+            for opt_role in pack.optional_roles:
+                triggered = False
+                if opt_role.activation == "capability-triggered":
+                    if any(c in selected_caps for c in opt_role.trigger_capabilities):
+                        triggered = True
+                elif opt_role.activation == "stack-triggered":
+                    if stack_bundle_id in opt_role.trigger_stack_bundles:
+                        triggered = True
+                elif opt_role.activation == "always":
+                    triggered = True
+                # as-needed / post-fix are not auto-triggered here
+
+                if not triggered:
+                    continue
+
+                key = ("agent", opt_role.resource_id)
+                if key in seen:
+                    continue
+                seen.add(key)
+                ref = self.registry.get("agent", opt_role.resource_id)
+                prov = ref.provenance if ref else {}
+                resources.append(
+                    ResourceSelection(
+                        id=opt_role.resource_id, type="agent", version="1.0.0",
+                        provenance_source="agency-agents"
+                        if (ref and ref.source == "agency-agents")
+                        else "bundled",
+                        provenance_commit_sha=prov.get(
+                            "upstream_commit",
+                            "8b61d297dc07772a000b85fc93138c8aefd21c45",
+                        ),
+                        provenance_license=prov.get("license", "MIT"),
+                        selection_reason=(
+                            f"execution-pack:{pack.id} optional-role "
+                            f"({opt_role.activation})"
+                        ),
+                    )
+                )
+
+        # --- 3. Project-type-relevant bundled resources --------------------
         pt_resources = self._load_project_type_resources(project_type_id)
         for res_def in pt_resources:
             rid = res_def.get("id", "")
@@ -194,7 +292,7 @@ class ResourceResolver:
                 )
             )
 
-        # --- 2. Capability-driven bundled resources -----------------------
+        # --- 4. Capability-driven bundled resources -----------------------
         cap_to_resources = self._build_capability_map(pt_resources)
         for cap_id in selected_caps:
             for defn in cap_to_resources.get(cap_id, []):
@@ -220,17 +318,19 @@ class ResourceResolver:
                     )
                 )
 
-        # --- 3. Agency specialists relevant to project type --------------
+        # --- 5. Agency specialists relevant to project type --------------
         agency_agents = self._select_agency_specialists(project_type_id)
-        bundled_agent_count = sum(1 for r in resources if r.type == "agent")
-        agent_slots_remaining = max(0, HARD_TEAM_CEILING - bundled_agent_count)
+        # Count agents so far (pack core + optional + bundled agents)
+        agent_count = sum(1 for r in resources if r.type == "agent")
+        agent_slots_remaining = max(0, HARD_TEAM_CEILING - agent_count)
         for agent in agency_agents[:agent_slots_remaining]:
-            if len([r for r in resources if r.type == "agent"]) >= HARD_TEAM_CEILING:
+            if agent_count >= HARD_TEAM_CEILING:
                 break
             key = ("agent", agent.id)
             if key in seen:
                 continue
             seen.add(key)
+            agent_count += 1
             reason = f"agency-division:{agent.division} relevance to project-type:{project_type_id}"
             resources.append(
                 ResourceSelection(
@@ -244,6 +344,17 @@ class ResourceResolver:
                 )
             )
 
+        # --- 6. Enforce team size ceiling ---------------------------------
+        if agent_count > HARD_TEAM_CEILING:
+            # Should not happen due to slots logic, but keep as safety net.
+            agent_resources = [r for r in resources if r.type == "agent"]
+            non_agent = [r for r in resources if r.type != "agent"]
+            resources = non_agent + agent_resources[:HARD_TEAM_CEILING]
+            errors.append(
+                f"Team size exceeded hard ceiling {HARD_TEAM_CEILING}; "
+                f"truncated to top-ranked selections."
+            )
+
         # Deterministic ordering: type then id.
         resources.sort(key=lambda r: (r.type, r.id))
 
@@ -251,7 +362,8 @@ class ResourceResolver:
             resources=resources,
             project_type_id=project_type_id,
             selected_capability_ids=selected_caps,
-            stack_bundle_id=str(stack_bundle_id or ""),
+            stack_bundle_id=stack_bundle_id,
+            execution_pack_id=execution_pack_id,
             errors=errors,
         )
 
@@ -320,6 +432,8 @@ def resolve_resources(
     stack_bundle_id: str,
     catalog_dir: Path | None = None,
     resources_root: Path | None = None,
+    execution_pack_id: Optional[str] = None,
+    pack_registry: Optional[ExecutionPackRegistry] = None,
 ) -> ResourceSelectionResult:
     """Resolve project type + capabilities + stack bundle to resource selections.
 
@@ -336,11 +450,17 @@ def resolve_resources(
     agency_catalog_path = catalog_dir / "agency-agents.yaml"
     registry = ResourceCatalogLoader(resources_root, agency_catalog_path).load()
 
-    resolver = ResourceResolver(registry)
+    if pack_registry is None:
+        pack_registry = build_default_pack_registry(
+            resource_registry=registry
+        )
+
+    resolver = ResourceResolver(registry, pack_registry=pack_registry)
     return resolver.resolve(
         project_type_id=project_type_id,
         selected_capability_ids=selected_capability_ids,
         stack_bundle_id=stack_bundle_id,
+        execution_pack_id=execution_pack_id,
     )
 
 
