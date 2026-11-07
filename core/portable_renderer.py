@@ -1,26 +1,52 @@
 """
-Derived Markdown renderer for M4 portable state.
+Derived Markdown renderer + portable AI workspace materialization for M4.
 
-These renderers produce human-readable project interfaces (AGENTS.md,
-CONTEXT.md, DECISIONS.md, HANDOFF.md) from canonical state only. The direction
-is strictly:
+The portable AI workspace (``.ai-workspace/``) holds the human-readable
+resources actually activated for the project. It is the portable,
+runtime-neutral source of truth from which runtime adapters derive their
+vendor-specific representations.
 
-    canonical YAML/lock  ->  derived Markdown
+Direction is strictly one-way:
 
-Markdown is never parsed back into canonical state, and canonical state always
-wins on conflict.
+    canonical state + resource selection  ->  .ai-workspace/ + derived Markdown
+
+Markdown and the portable workspace are never parsed back into canonical
+state, and canonical state always wins on conflict.
 
 No runtime-specific instructions (Codex/OpenCode/Antigravity/Claude/Cursor)
-are emitted here; runtime adaptation belongs to M5.
+are emitted here; runtime adaptation belongs to the adapter layer.
 """
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from typing import Optional
 
 from core.domain.contracts.project_state import ProjectSpec
+from core.resource_resolver import ResourceSelection, ResourceSelectionResult
 from core.state import ProjectState, ResourcesLock
+
+
+# Canonical resource type -> directory name under .ai-workspace/.
+WORKSPACE_SUBDIR = {
+    "agent": "agents",
+    "skill": "skills",
+    "shared-module": "shared",
+    "workflow": "workflows",
+    "script": "scripts",
+    "rule": "rules",
+}
+
+# Source file/suffix used to materialize each resource type from resources/.
+RESOURCE_SOURCE_SUFFIX = {
+    "agent": ".md",
+    "skill": "/SKILL.md",
+    "shared-module": "",      # copied as a directory tree
+    "workflow": ".md",
+    "script": ".py",
+    "rule": ".md",
+}
 
 
 def _bullet_list(items, prefix="- ") -> str:
@@ -29,8 +55,12 @@ def _bullet_list(items, prefix="- ") -> str:
     return "\n".join(f"{prefix}{item}" for item in items)
 
 
-def render_agents_md(spec: ProjectSpec) -> str:
-    """Portable AGENTS.md derived from project.yaml."""
+def render_agents_md(
+    spec: ProjectSpec,
+    active_agents: Optional[list[ResourceSelection]] = None,
+    active_skills: Optional[list[ResourceSelection]] = None,
+) -> str:
+    """Portable AGENTS.md derived from project.yaml (+ active resources)."""
     lines = [
         "# AGENTS.md",
         "",
@@ -58,6 +88,39 @@ def render_agents_md(spec: ProjectSpec) -> str:
         lines.append("- **Stack Bundle**: None")
     lines += [
         "",
+        "## Portable AI Workspace",
+        "",
+        "- Activated portable resources live under ``.ai-workspace/``:",
+        "  - ``.ai-workspace/agents/``   active agents",
+        "  - ``.ai-workspace/skills/``   active skills",
+        "  - ``.ai-workspace/workflows/`` active workflows",
+        "  - ``.ai-workspace/rules/``    active rules",
+        "  - ``.ai-workspace/shared/``   shared modules",
+        "  - ``.ai-workspace/scripts/``  active scripts",
+        "- Runtime adapters derive vendor-specific files from this workspace.",
+        "",
+    ]
+    if active_agents:
+        lines += [
+            "## Active Agents",
+            "",
+            _bullet_list(
+                [
+                    f"**{r.id}** — {r.description or r.name}"
+                    f" (score {r.score})" if r.score else f"**{r.id}** — {r.description or r.name}"
+                    for r in active_agents
+                ]
+            ),
+            "",
+        ]
+    if active_skills:
+        lines += [
+            "## Active Skills",
+            "",
+            _bullet_list([f"**{r.id}**" for r in active_skills]),
+            "",
+        ]
+    lines += [
         "## Authority",
         "",
         "- ``.ai-coding-starter/project.yaml`` is the machine-authoritative project config.",
@@ -172,6 +235,130 @@ def render_handoff_md(
     return "\n".join(lines) + "\n"
 
 
+# ---------------------------------------------------------------------------
+# Portable AI workspace materialization
+# ---------------------------------------------------------------------------
+
+def _copy_file(src: Path, dst: Path) -> int:
+    """Copy a single file, creating parent dirs. Returns bytes copied."""
+    if not src.is_file():
+        return 0
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dst)
+    return src.stat().st_size
+
+
+def _copy_tree(src: Path, dst: Path) -> int:
+    """Copy a directory tree. Returns bytes copied."""
+    if not src.is_dir():
+        return 0
+    total = 0
+    for f in sorted(src.rglob("*")):
+        if f.is_file():
+            rel = f.relative_to(src)
+            out = dst / rel
+            out.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(f, out)
+            total += f.stat().st_size
+    return total
+
+
+def render_portable_workspace(
+    dest_dir: Path | str,
+    resource_selection: ResourceSelectionResult,
+    resources_root: Path | str,
+) -> list[Path]:
+    """Materialize every active portable resource into ``.ai-workspace/``.
+
+    Invariant (§10): every locked active resource that has a filesystem
+    representation gets a corresponding file under ``.ai-workspace/``.
+    Resource types with no filesystem representation are skipped.
+
+    Returns the list of written paths.
+    """
+    dest = Path(dest_dir)
+    workspace = dest / ".ai-workspace"
+    resources_root = Path(resources_root)
+    written: list[Path] = []
+
+    type_to_source_dir = {
+        "agent": "agents",
+        "skill": "skills",
+        "shared-module": "shared",
+        "workflow": "workflows",
+        "script": "scripts",
+        "rule": "rules",
+    }
+
+    for res in resource_selection.resources:
+        rtype = res.type
+        rid = res.id
+        source_dir_name = type_to_source_dir.get(rtype)
+        if source_dir_name is None:
+            # No filesystem representation for this type; skip.
+            continue
+
+        suffix = RESOURCE_SOURCE_SUFFIX.get(rtype, "")
+        src_dir = resources_root / source_dir_name
+
+        if rtype == "shared-module":
+            # Copy the whole shared module directory tree.
+            src = src_dir / rid
+            dst = workspace / WORKSPACE_SUBDIR[rtype] / rid
+            bytes_copied = _copy_tree(src, dst)
+            if bytes_copied > 0:
+                written.append(dst)
+            continue
+
+        if rtype == "skill":
+            src = src_dir / rid / "SKILL.md"
+            dst = workspace / WORKSPACE_SUBDIR[rtype] / rid / "SKILL.md"
+        else:
+            src = src_dir / f"{rid}{suffix}"
+            dst = workspace / WORKSPACE_SUBDIR[rtype] / f"{rid}{suffix}"
+
+        bytes_copied = _copy_file(src, dst)
+        if bytes_copied > 0:
+            written.append(dst)
+        elif rtype == "agent":
+            # Agency agents have no bundled source file; materialize them from
+            # their registry metadata so the portable workspace always contains
+            # the actual active agent content (no phantom resources, §10).
+            generated = _generate_agent_md(res)
+            if generated:
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                dst.write_text(generated, encoding="utf-8")
+                written.append(dst)
+
+    return written
+
+
+def _generate_agent_md(res: ResourceSelection) -> Optional[str]:
+    """Generate a portable agent markdown from a selection's metadata."""
+    lines = [
+        "---",
+        f"name: {res.id}",
+        f"description: {res.description or res.id}",
+    ]
+    if res.division:
+        lines.append(f"division: {res.division}")
+    if res.score:
+        lines.append(f"score: {res.score}")
+    lines += [
+        "---",
+        "",
+        f"# {res.name or res.id}",
+        "",
+        f"> Portable agent activated for the project.",
+        f"> Type: agent | ID: {res.id}",
+    ]
+    if res.selection_reason:
+        lines += ["", f"Selection reason: {res.selection_reason}", ""]
+    if res.description:
+        lines += ["", res.description, ""]
+    return "\n".join(lines) + "\n"
+
+
 def render_all(
     dest_dir: Path | str,
     spec: ProjectSpec,
@@ -179,15 +366,19 @@ def render_all(
     *,
     last_session_summary: Optional[str] = None,
     last_session_next_steps: Optional[list[str]] = None,
+    resources: Optional[ResourceSelectionResult] = None,
 ) -> list[Path]:
     """Render all derived Markdown files into ``dest_dir`` (project root).
 
-    Returns the list of written paths. Derived files live at the project root,
-    while canonical state lives in ``.ai-coding-starter/``.
+    Derived files live at the project root, while canonical state lives in
+    ``.ai-coding-starter/``. When ``resources`` is provided, AGENTS.md lists
+    the active agents and skills.
     """
     dest = Path(dest_dir)
+    active_agents = resources.agents if resources else None
+    active_skills = [r for r in resources.resources if r.type == "skill"] if resources else None
     files = {
-        "AGENTS.md": render_agents_md(spec),
+        "AGENTS.md": render_agents_md(spec, active_agents=active_agents, active_skills=active_skills),
         "CONTEXT.md": render_context_md(spec, state),
         "DECISIONS.md": render_decisions_md(),
         "HANDOFF.md": render_handoff_md(

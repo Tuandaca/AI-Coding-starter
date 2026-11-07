@@ -47,7 +47,9 @@ from core.state import (
     write_resources_lock,
     write_state,
 )  # noqa: E402
-from core.portable_renderer import render_all  # noqa: E402
+from core.portable_renderer import render_all, render_portable_workspace  # noqa: E402
+from core.stack_scaffold import scaffold_stack, write_gitignore, write_project_readme  # noqa: E402
+from core import cli_ui  # noqa: E402
 
 # generic-renderer.py has a hyphen in its file name, so use importlib.
 _generic_renderer_mod = importlib.import_module("core.generic-renderer")  # noqa: E402
@@ -742,25 +744,27 @@ def clear_screen():
     """Clear terminal screen."""
     os.system('cls' if os.name == 'nt' else 'clear')
 
+
 def print_header():
-    """Print beautiful header."""
+    """Print the wizard header using the centralized CLI UI."""
     clear_screen()
-    print("\n" + "=" * 60)
-    print("   🚀 VIBECODING - Interactive Project Creator")
-    print("=" * 60)
+    print(cli_ui.title("AI Coding Starter", "2.1.1", width=66))
     print()
+
 
 def print_success(msg):
     """Print success message."""
-    print(f"  ✅ {msg}")
+    print(cli_ui.success(msg))
+
 
 def print_error(msg):
     """Print error message."""
-    print(f"  ❌ {msg}")
+    print(cli_ui.error(msg))
+
 
 def print_info(msg):
     """Print info message."""
-    print(f"  ℹ️  {msg}")
+    print(cli_ui.info(msg))
 
 def get_input(prompt, default=None):
     """Get user input with optional default."""
@@ -1596,13 +1600,12 @@ def load_starter_catalog():
 def select_project_type(catalog):
     """Step 1: choose a project type from the catalog."""
     types = sorted(catalog.project_types.values(), key=lambda pt: str(pt.id))
-    print("\n" + "=" * 60)
-    print("  📦 BƯỚC 1: LOẠI DỰ ÁN (Project Type)")
-    print("=" * 60)
+    print()
+    print(cli_ui.section("BƯỚC 1: LOẠI DỰ ÁN (Project Type)"))
     for i, pt in enumerate(types, 1):
-        marker = "  ⚠️  (chưa quyết định)" if str(pt.id) == NOT_DECIDED else ""
-        print(f"    [{i}] {pt.name}{marker}")
-        print(f"        {pt.description}")
+        marker = "  (chưa quyết định)" if str(pt.id) == NOT_DECIDED else ""
+        print(cli_ui.option(str(i), pt.name + marker, pt.description))
+    print()
     while True:
         selection = get_input("Chọn loại dự án (hoặc Enter để chọn 'Not Decided')", "")
         if not selection:
@@ -1629,15 +1632,14 @@ def select_capabilities(catalog, project_type_id):
         )
     })
     defaults = {str(c) for c in pt.default_capabilities}
-    print("\n" + "=" * 60)
-    print("  🎯 BƯỚC 2: KHẢ NĂNG (Capabilities)")
-    print("=" * 60)
-    print(f"  Loại dự án: {pt.name}")
+    print()
+    print(cli_ui.section("BƯỚC 2: KHẢ NĂNG (Capabilities)"))
+    print(cli_ui.metadata("Loại dự án", pt.name))
     print("  Mặc định đã được chọn (bổ sung hoặc bỏ chọn bằng số):")
     for i, cap_id in enumerate(relevant, 1):
         cap = catalog.capabilities[cap_id]
         marked = "✅" if cap_id in defaults else "⭕"
-        print(f"    [{i}] {marked} {cap.name} — {cap.description}")
+        print(f"    [{cli_ui.dim(str(i))}] {marked} {cli_ui.bright_cyan(cap.name)} — {cli_ui.dim(cap.description)}")
     selection = get_input(
         "Chọn năng lực bổ sung (số, cách nhau bởi dấu phẩy; -số để bỏ chọn) "
         "hoặc Enter để dùng mặc định: ",
@@ -1675,19 +1677,19 @@ def resolve_stacks(catalog, project_type_id, cap_ids):
 
 def select_bundle(result, catalog):
     """Step 4: choose ONE bundle from the ranked recommendations."""
-    print("\n" + "=" * 60)
-    print("  🗄️  BƯỚC 3: STACK BUNDLE (chọn MỘT bundle duy nhất)")
-    print("=" * 60)
+    print()
+    print(cli_ui.section("BƯỚC 3: STACK BUNDLE (chọn MỘT bundle duy nhất)"))
     if not result.ok:
         print_error(result.rejection_reason or "Không thể giải quyết stack.")
         return None
     for i, rec in enumerate(result.bundles, 1):
-        print(f"    [{i}] {rec.name} ({rec.profile})")
-        print(f"        {rec.description}")
+        mark = " (recommended)" if i == 1 else ""
+        print(cli_ui.option(str(i), rec.name + f" ({rec.profile})" + mark, rec.description))
         if rec.matched_capabilities:
-            print(f"        ✅ Khả năng khớp: {', '.join(rec.matched_capabilities)}")
+            print(cli_ui.metadata("  Khả năng khớp", ", ".join(rec.matched_capabilities)))
         if rec.missing_capabilities:
-            print(f"        ⚠️  Chưa có: {', '.join(rec.missing_capabilities)}")
+            print(cli_ui.metadata("  Chưa có", ", ".join(rec.missing_capabilities)))
+    print()
     while True:
         selection = get_input(
             "Chọn một bundle (số) hoặc Enter để chọn bundle đầu tiên: ", ""
@@ -1904,20 +1906,34 @@ def main():
         write_state(staging_proj, state)
         write_resources_lock(staging_proj, lock)
 
-        # Copy resources using resource selection
-        merged_req = _build_merge_req_from_selection(resource_selection)
-        total_bytes = copy_selective(
-            resource_root,
-            staging_proj,
-            merged_req,
-            project_name,
-            [],
-            tech_stack,
-            env_info
+        # Materialize the portable AI workspace (.ai-workspace/) with the
+        # actual contents of every active portable resource. This replaces the
+        # legacy root-level agents/skills/.shared/workflows/scripts/core/rules
+        # selective copy; V2 projects no longer emit the legacy V1 layout.
+        total_bytes = 0
+        written = render_portable_workspace(
+            staging_proj, resource_selection, resource_root
         )
+        total_bytes = sum(p.stat().st_size for p in written)
 
-        # Render derived Markdown files
-        render_all(staging_proj, spec, state)
+        # Render derived Markdown (AGENTS.md, CONTEXT.md, DECISIONS.md,
+        # HANDOFF.md) from canonical state. No root GEMINI.md here; only the
+        # Antigravity runtime adapter may emit .agent/GEMINI.md.
+        render_all(staging_proj, spec, state, resources=resource_selection)
+
+        # Scaffold the resolved stack (e.g. react-static -> React + Vite +
+        # TypeScript + TailwindCSS). Local templates only; no network.
+        scaffold_stack(staging_proj, bundle_id, project_name)
+
+        # Stack-aware .gitignore. Canonical state (.ai-coding-starter/) and
+        # the portable workspace (.ai-workspace/) are never ignored.
+        write_gitignore(staging_proj, bundle_id)
+
+        # Project README (owned by the generated project, not the starter).
+        write_project_readme(
+            staging_proj, project_name, project_type_id,
+            selected_cap_ids, bundle_id, runtime_id,
+        )
 
         # Install runtime adapter (into staging)
         if runtime_id != "portable":
@@ -1984,37 +2000,36 @@ def main():
         shutil.rmtree(staging, ignore_errors=True)
 
     # Step 9: Show completion with honest status (CF-4).
-    print("\n" + "=" * 60)
+    print()
+    print(cli_ui.title("Hoan Tat", width=66))
     if runtime_id != "portable" and not runtime_ok:
-        print("  HOAN TAT (PHAN LOI CAI DAT RUNTIME)")
+        print(cli_ui.warning("HOAN TAT (PHAN LOI CAI DAT RUNTIME)"))
     else:
-        print("  HOAN TAT!")
-    print("=" * 60)
-    print(f"\n  Du an: {full_project_path}")
-    print(f"  Kich thuoc: {format_size(total_bytes)}")
+        print(cli_ui.success("HOAN TAT!"))
+    print(cli_ui.metadata("Du an", str(full_project_path)))
+    print(cli_ui.metadata("Kich thuoc", format_size(total_bytes)))
+    print()
 
     if runtime_id != "portable" and not runtime_ok:
-        print("\n  Trang thai: PARTIAL_SUCCESS")
-        print("  Trang thai can duoc cap nhat va chay lai de cai dat runtime adapter.")
+        print(cli_ui.metadata("Trang thai", "PARTIAL_SUCCESS"))
+        print(cli_ui.info("Trang thai can duoc cap nhat va chay lai de cai dat runtime adapter."))
         if runtime_errors:
-            print(f"  Loi cai dat runtime: {'; '.join(runtime_errors)}")
-        print("\n  Buoc tiep theo:")
-        print(f"     1. Mo thu muc '{full_project_path}' trong {runtime_id}")
-        print(f"     2. Xem .ai-coding-starter/project.yaml")
-        print(f"     3. Bat dau VibeCoding!")
-        print(f"     4. Cai dat runtime adapter sau (chay lai new_project.py va chon runtime).")
-        print()
+            print(cli_ui.metadata("Loi cai dat runtime", "; ".join(runtime_errors)))
+        print(cli_ui.section("Buoc tiep theo:"))
+        print(cli_ui.bullet(f"Mo thu muc '{full_project_path}' trong {runtime_id}"))
+        print(cli_ui.bullet("Xem .ai-coding-starter/project.yaml"))
+        print(cli_ui.bullet("Bat dau VibeCoding!"))
+        print(cli_ui.bullet("Cai dat runtime adapter sau (chay lai new_project.py va chon runtime)."))
     else:
         full_size = 10 * 1024 * 1024
         savings = max(0, 100 - (total_bytes / full_size * 100))
-        print(f"  Tiet kiem: ~{savings:.0f}% so voi full template")
-
-        print("\n  Buoc tiep theo:")
-        print(f"     1. Mo thu muc '{full_project_path}' trong {runtime_id}")
-        print(f"     2. Xem .ai-coding-starter/project.yaml")
-        print(f"     3. Bat dau VibeCoding!")
-        print(f"     4. Xem dashboard: python new_project.py --stats")
-        print()
+        print(cli_ui.metadata("Tiet kiem", f"~{savings:.0f}% so voi full template"))
+        print(cli_ui.section("Buoc tiep theo:"))
+        print(cli_ui.bullet(f"Mo thu muc '{full_project_path}' trong {runtime_id}"))
+        print(cli_ui.bullet("Xem .ai-coding-starter/project.yaml"))
+        print(cli_ui.bullet("Bat dau VibeCoding!"))
+        print(cli_ui.bullet("Xem dashboard: python new_project.py --stats"))
+    print()
 
 
 def _merge_dir_contents(src: Path, dst: Path) -> None:
@@ -2029,29 +2044,57 @@ def _merge_dir_contents(src: Path, dst: Path) -> None:
             shutil.copy2(item, target)
 
 
+def load_runtime_metadata() -> dict:
+    """Load runtime display metadata from the canonical adapter catalog.
+
+    Falls back to an empty dict if the catalog is unavailable, so the menu
+    still works offline.
+    """
+    path = DEFAULT_CATALOG_DIR / "runtime-capabilities.yaml"
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        return {str(r.get("id")): r for r in data.get("runtimes", []) if isinstance(r, dict)}
+    except (OSError, ValueError):
+        return {}
+
+
 def select_runtime():
     """Select runtime adapter for the project.
 
-    Returns:
-        Runtime ID string (codex, opencode, antigravity, claude-code, cursor)
-        or "portable" for portable-only (no runtime-specific files).
-    """
-    runtimes = [
-        ("portable", "Portable / Shared instructions only", "Portable AGENTS.md only - no runtime-specific files"),
-        ("codex", "Codex CLI", "OpenAI Codex CLI - .codex/AGENTS.md"),
-        ("opencode", "OpenCode", "OpenCode - .opencode/OpenCode.md"),
-        ("antigravity", "Antigravity IDE", "Antigravity IDE - .agent/GEMINI.md"),
-        ("claude-code", "Claude Code", "Anthropic Claude Code - .claude/CLAUDE.md"),
-        ("cursor", "Cursor", "Cursor IDE - .cursor/AGENTS.md"),
-    ]
+    Portable is the default (§27). Descriptions are loaded from the adapter
+    catalog rather than hardcoded stale paths (§26).
 
-    print("\n  SELECT RUNTIME ADAPTER")
-    print("-" * 60)
+    Returns:
+        Runtime ID string or "portable" for portable-only.
+    """
+    meta = load_runtime_metadata()
+    order = ["portable", "codex", "opencode", "antigravity", "claude-code", "cursor"]
+
+    runtimes = []
+    for rid in order:
+        if rid == "portable":
+            name = "Portable"
+            desc = ("Canonical state + portable AI workspace (.ai-workspace/) + "
+                    "root AGENTS.md. Recommended if you may switch between AI "
+                    "coding environments.")
+        else:
+            m = meta.get(rid, {})
+            name = str(m.get("name", rid))
+            desc = str(m.get("description", ""))
+            paths = m.get("project_paths", [])
+            if paths:
+                desc = f"{desc} Project paths: {', '.join(paths)}"
+        runtimes.append((rid, name, desc))
+
+    print()
+    print(cli_ui.title("AI Coding Starter", "2.1.1", width=66))
+    print(cli_ui.section("SELECT RUNTIME ADAPTER"))
     print("  Select how project instructions will be represented:")
     print()
     for i, (rid, name, desc) in enumerate(runtimes, 1):
-        print(f"    [{i}] {name}")
-        print(f"        {desc}")
+        mark = " (recommended)" if rid == "portable" else ""
+        print(cli_ui.option(str(i), name + mark, desc))
     print()
 
     while True:
@@ -2068,21 +2111,36 @@ def select_runtime():
 def print_preview(project_name, project_type_id, selected_cap_ids,
                   bundle_id, tech_stack, resource_selection, runtime_id,
                   project_root):
-    """Show preview of what will be generated."""
+    """Show preview of what will be generated, with selection reasons."""
     print()
-    print("=" * 60)
-    print("  PREVIEW")
-    print("=" * 60)
-    print(f"  Project: {project_name}")
-    print(f"  Location: {project_root}")
-    print(f"  Type: {project_type_id}")
-    print(f"  Capabilities: {', '.join(selected_cap_ids) if selected_cap_ids else '(none)'}")
-    print(f"  Stack: {tech_stack.get('bundle_name', bundle_id)} ({bundle_id})")
-    print(f"  Runtime: {runtime_id}")
+    print(cli_ui.title("Preview", width=66))
+    print(cli_ui.metadata("Project", project_name))
+    print(cli_ui.metadata("Location", str(project_root)))
+    print(cli_ui.metadata("Type", project_type_id))
+    caps = ", ".join(selected_cap_ids) if selected_cap_ids else "(none)"
+    print(cli_ui.metadata("Capabilities", caps))
+    print(cli_ui.metadata("Stack", f"{tech_stack.get('bundle_name', bundle_id)} ({bundle_id})"))
+    print(cli_ui.metadata("Runtime", runtime_id))
     print()
-    print("  Resources to be created:")
-    for r in resource_selection.resources:
-        print(f"    - {r.type}:{r.id} ({r.selection_reason})")
+
+    agents = resource_selection.agents
+    print(cli_ui.section(f"Agents selected: {len(agents)}"))
+    for r in agents:
+        score_part = f"  {cli_ui.dim('score')}={cli_ui.bright_white(str(r.score))}" if r.score else ""
+        reason = cli_ui.dim(r.selection_reason)
+        print(f"  {cli_ui.bright_cyan(r.id)}{score_part}")
+        print(f"        {reason}")
+    print()
+
+    non_agents = [r for r in resource_selection.resources if r.type != "agent"]
+    if non_agents:
+        print(cli_ui.section("Other portable resources"))
+        for r in non_agents:
+            print(f"  {cli_ui.cyan(r.type)}:{cli_ui.white(r.id)}  {cli_ui.dim(r.selection_reason)}")
+        print()
+
+    print(cli_ui.metadata("Portable workspace", ".ai-workspace/"))
+    print(cli_ui.metadata("Canonical state", ".ai-coding-starter/"))
     print()
 
 
@@ -2128,9 +2186,164 @@ def _build_merge_req_from_selection(resource_selection):
     return merged
 
 
+def _runtime_agents_from_workspace(project_root: Path) -> list[dict]:
+    """Build agent render data from the portable .ai-workspace.
+
+    Reads ``.ai-workspace/agents/{id}.md`` for every locked agent so the
+    runtime adapter can render real agent contents during a runtime switch.
+    """
+    state_dir = project_root / ".ai-coding-starter"
+    lock_path = state_dir / "resources.lock"
+    agents: list[dict] = []
+    try:
+        lock = read_resources_lock(lock_path)
+    except Exception:
+        return agents
+    workspace_agents = project_root / ".ai-workspace" / "agents"
+    for res in lock.resources:
+        if res.type != "agent":
+            continue
+        agent_file = workspace_agents / f"{res.id}.md"
+        name = res.id
+        description = ""
+        body = ""
+        if agent_file.is_file():
+            text = agent_file.read_text(encoding="utf-8")
+            if text.startswith("---\n"):
+                end = text.find("\n---", 4)
+                if end != -1:
+                    front = text[4:end]
+                    body = text[end + 4:].lstrip("\n")
+                    for line in front.splitlines():
+                        if line.startswith("name:"):
+                            name = line.split(":", 1)[1].strip() or res.id
+                        elif line.startswith("description:"):
+                            description = line.split(":", 1)[1].strip()
+                else:
+                    body = text
+            else:
+                body = text
+        agents.append({
+            "id": res.id,
+            "name": name,
+            "description": description,
+            "division": "",
+            "body": body or description,
+        })
+    return agents
+
+
+def switch_runtime(project_path: str | Path, runtime_id: str) -> bool:
+    """Switch an existing generated project to a different runtime.
+
+    Preserves canonical state (``.ai-coding-starter/``) and the portable
+    workspace (``.ai-workspace/``); only runtime-owned derived files change.
+    """
+    project_path = Path(project_path)
+    state_dir = project_path / ".ai-coding-starter"
+    if not state_dir.is_dir():
+        cli_ui.error(f"No AI-Coding-starter project at {project_path}")
+        return False
+
+    # Snapshot canonical state + portable workspace before switching.
+    before = _snapshot_canonical(project_path)
+
+    renderer = GenericRenderer(
+        project_path, adapters_dir=str(STARTER_PATH / "runtime-adapters")
+    )
+
+    # Determine the previous runtime(s) from the ownership manifest.
+    manifest = renderer._read_manifest()
+    runtimes = manifest.get("runtimes", {}) if isinstance(manifest, dict) else {}
+    previous_runtimes: list[str] = []
+    if isinstance(runtimes, dict):
+        for rid in runtimes:
+            if rid != runtime_id and rid != "portable":
+                previous_runtimes.append(rid)
+
+    for previous in previous_runtimes:
+        res = renderer.uninstall(previous)
+        for err in res.errors:
+            cli_ui.warning(f"uninstall {previous}: {err}")
+        if res.ok:
+            cli_ui.success(f"Previous runtime '{previous}' removed")
+
+    if runtime_id != "portable":
+        install_result = renderer.install(runtime_id)
+        if not install_result.ok:
+            for err in install_result.errors:
+                cli_ui.error(err)
+            cli_ui.error(f"Failed to install runtime '{runtime_id}'")
+            return False
+        cli_ui.success(f"Runtime adapter '{runtime_id}' installed")
+
+        # Render selected agents into the target runtime (derived, reversible).
+        agents_data = _runtime_agents_from_workspace(project_path)
+        if agents_data:
+            agent_result = renderer.render_agents(runtime_id, agents_data)
+            if not agent_result.ok:
+                for err in agent_result.errors:
+                    cli_ui.warning(f"agent render: {err}")
+            else:
+                cli_ui.success(
+                    f"Rendered {len(agents_data)} agent(s) for {runtime_id}"
+                )
+    else:
+        cli_ui.success("Switched to Portable (no runtime-specific files)")
+
+    # Verify canonical state and portable workspace are byte-identical.
+    after = _snapshot_canonical(project_path)
+    if before != after:
+        cli_ui.error("Canonical state changed during switch — this is a bug")
+        return False
+    cli_ui.success("Canonical state and portable workspace preserved")
+    return True
+
+
+def _snapshot_canonical(project_root: Path) -> dict:
+    """Snapshot canonical state files and portable workspace contents."""
+    snap: dict[str, bytes] = {}
+    state_dir = project_root / ".ai-coding-starter"
+    for fname in ("project.yaml", "state.yaml", "resources.lock"):
+        p = state_dir / fname
+        if p.is_file():
+            snap[p.as_posix()] = p.read_bytes()
+    workspace = project_root / ".ai-workspace"
+    if workspace.is_dir():
+        for p in sorted(workspace.rglob("*")):
+            if p.is_file():
+                snap[p.relative_to(project_root).as_posix()] = p.read_bytes()
+    return snap
+
+
+def _parse_cli_args(argv: list[str]) -> dict:
+    """Parse top-level CLI flags: --stats, --switch-runtime, --project, --no-color."""
+    result = {"stats": False, "switch_runtime": None, "project": None, "no_color": False}
+    i = 1
+    while i < len(argv):
+        arg = argv[i]
+        if arg == "--stats":
+            result["stats"] = True
+        elif arg == "--no-color":
+            result["no_color"] = True
+        elif arg == "--switch-runtime":
+            i += 1
+            if i < len(argv):
+                result["switch_runtime"] = argv[i]
+        elif arg == "--project":
+            i += 1
+            if i < len(argv):
+                result["project"] = argv[i]
+        i += 1
+    return result
+
+
 if __name__ == "__main__":
-    # Check for --stats flag
-    if len(sys.argv) > 1 and sys.argv[1] == "--stats":
+    args = _parse_cli_args(sys.argv)
+    if args["no_color"]:
+        cli_ui.set_color_enabled(False)
+
+    if args["stats"]:
         try:
             from analytics import print_dashboard
             print_dashboard()
@@ -2138,6 +2351,13 @@ if __name__ == "__main__":
             print("\n  ❌ analytics.py not found. Please check installation.")
             sys.exit(1)
         sys.exit(0)
+
+    if args["switch_runtime"]:
+        if not args["project"]:
+            cli_ui.error("--switch-runtime requires --project <path>")
+            sys.exit(2)
+        ok = switch_runtime(args["project"], args["switch_runtime"])
+        sys.exit(0 if ok else 1)
 
     try:
         main()

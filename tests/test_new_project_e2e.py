@@ -203,17 +203,17 @@ class TestNewProjectE2E(unittest.TestCase):
         self.assertTrue((project_root / ".ai-coding-starter" / "project.yaml").is_file())
 
     def test_e2e_lock_matches_copied_resources(self):
-        """Every locked BUNDLED agent corresponds to a resource actually copied into the project.
+        """Every locked BUNDLED agent corresponds to a portable resource materialized under .ai-workspace/.
         Agency agents are knowledge-base references (provenance in lock), not copied files."""
         project_root, _ = _run_wizard("lock-project", "saas", confirm="y")
         lock = new_project.read_resources_lock(
             project_root / ".ai-coding-starter" / "resources.lock")
-        # Agents are copied as <id>.md under agents/.
-        agents_dir = project_root / "agents"
+        # Portable agents are materialized under .ai-workspace/agents/<id>.md.
+        agents_dir = project_root / ".ai-workspace" / "agents"
         for res in lock.resources:
             if res.type == "agent" and res.provenance.source == "bundled":
                 self.assertTrue((agents_dir / f"{res.id}.md").is_file(),
-                                f"Locked bundled agent {res.id} was not copied into the project")
+                                f"Locked bundled agent {res.id} was not materialized in .ai-workspace")
 
     def test_e2e_no_network_access(self):
         """Generation works with bundled resources only (no external template required)."""
@@ -265,7 +265,7 @@ class TestNewProjectE2E(unittest.TestCase):
     # ------------------------------------------------------------------
     # CF-2: Transactional generation — failure injection rollback
     # ------------------------------------------------------------------
-    @patch("new_project.copy_selective")
+    @patch("new_project.render_portable_workspace")
     def test_cf2_failure_injection_rolls_back_no_partial_project(self, mock_copy):
         """CF-2: if a post-confirmation step fails, no partial project remains."""
         mock_copy.side_effect = OSError("simulated disk failure during copy")
