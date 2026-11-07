@@ -47,6 +47,12 @@ from core.execution_pack_registry import (
     ExecutionPackRegistry,
     build_default_pack_registry,
 )
+from core.applicability import (
+    Applicability,
+    ApplicabilityContext,
+    ApplicabilityResult,
+    is_resource_eligible,
+)
 
 # Canonical location of the resource requirements catalog relative to this module.
 DEFAULT_CATALOG_DIR = Path(__file__).resolve().parent.parent / "catalog"
@@ -230,6 +236,51 @@ class ResourceResolver:
         agent_budget = self._agent_budget_for_bundle(stack_bundle_id)
         agent_ceiling = min(agent_budget[1], HARD_TEAM_CEILING)
 
+        # --- Applicability registry (resource-centric eligibility filter) ---
+        # Built once per resolution; Section 5 single evaluator for all types.
+        self._applicability_registry = self._build_applicability_registry()
+        # Stack technology tags derived from the selected bundle's technologies,
+        # used by the stack_tags eligibility axis.
+        self._stack_tags = self._stack_tags_for_bundle(stack_bundle_id)
+
+        # --- Eligibility context (Section 5 single evaluator). selected
+        # so_far grows as roles are added so `requires`/`conflicts_with` can
+        # be evaluated against already-selected resources.
+        selected_so_far: set[tuple[str, str]] = set()
+
+        def _ctx() -> ApplicabilityContext:
+            return ApplicabilityContext(
+                project_type=project_type_id,
+                capabilities=frozenset(selected_caps),
+                stack_tags=self._stack_tags,
+                task_tags=frozenset(),
+                selected=frozenset(selected_so_far),
+            )
+
+        def _add_eligible_agent(role_id: str, reason: str) -> None:
+            """Add an execution-pack agent only if eligible (Section 4/6)."""
+            key = ("agent", role_id)
+            if key in seen:
+                return
+            applicability = self._applicability_registry.get(key)
+            if not is_resource_eligible(applicability, _ctx()).applicable:
+                # Ineligible: never enters scoring, regardless of pack role.
+                return
+            if not self._registry_has("agent", role_id):
+                errors.append(f"Resource not found in registry: agent:{role_id}")
+                return
+            seen.add(key)
+            selected_so_far.add(key)
+            resources.append(
+                self._make_selection(
+                    "agent", role_id, reason,
+                    pack_core_roles=pack_core_roles,
+                    selected_caps=selected_caps,
+                    project_type_id=project_type_id,
+                    stack_bundle_id=stack_bundle_id,
+                )
+            )
+
         # --- 1. Execution pack core roles (highest priority) --------------
         pack = None
         pack_core_roles: list[str] = []
@@ -242,19 +293,9 @@ class ResourceResolver:
             else:
                 pack_core_roles = list(pack.core_roles)
                 for role_id in pack_core_roles:
-                    key = ("agent", role_id)
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    resources.append(
-                        self._make_selection(
-                            "agent", role_id,
-                            f"execution-pack:{pack.id} core-role",
-                            pack_core_roles=pack_core_roles,
-                            selected_caps=selected_caps,
-                            project_type_id=project_type_id,
-                            stack_bundle_id=stack_bundle_id,
-                        )
+                    _add_eligible_agent(
+                        role_id,
+                        f"execution-pack:{pack.id} core-role",
                     )
 
         # --- 2. Execution pack optional roles (trigger-matched) -----------
@@ -274,20 +315,10 @@ class ResourceResolver:
                 if not triggered:
                     continue
 
-                key = ("agent", opt_role.resource_id)
-                if key in seen:
-                    continue
-                seen.add(key)
-                resources.append(
-                    self._make_selection(
-                        "agent", opt_role.resource_id,
-                        f"execution-pack:{pack.id} optional-role "
-                        f"({opt_role.activation})",
-                        pack_core_roles=pack_core_roles,
-                        selected_caps=selected_caps,
-                        project_type_id=project_type_id,
-                        stack_bundle_id=stack_bundle_id,
-                    )
+                _add_eligible_agent(
+                    opt_role.resource_id,
+                    f"execution-pack:{pack.id} optional-role "
+                    f"({opt_role.activation})",
                 )
 
         # --- 3. Project-type + capability/stack-driven bundled resources --
@@ -295,6 +326,22 @@ class ResourceResolver:
         # is activated ONLY when its condition matches the resolved context.
         # This replaces the old free-form "capability:<id>" reason parsing.
         pt_resources = self._load_project_type_resources(project_type_id)
+
+        # Eligibility context for the Section 5 single evaluator. Selected
+        # resources so far are threaded in to evaluate `requires` /
+        # `conflicts_with` axes.
+        selected_so_far: set[tuple[str, str]] = {
+            (r.type, r.id) for r in resources if r.type != "agent"
+        }
+        selected_so_far.update((r.type, r.id) for r in resources if r.type == "agent")
+        ctx = ApplicabilityContext(
+            project_type=project_type_id,
+            capabilities=frozenset(selected_caps),
+            stack_tags=self._stack_tags,
+            task_tags=frozenset(),
+            selected=frozenset(selected_so_far),
+        )
+
         for res_def in pt_resources:
             rid = res_def.get("id", "")
             rtype = res_def.get("type", "")
@@ -306,6 +353,13 @@ class ResourceResolver:
                 continue
             if not self._registry_has(rtype, rid):
                 errors.append(f"Resource not found in registry: {rtype}:{rid}")
+                continue
+            # --- ELIGIBILITY FILTER (Section 4 / Section 6) ---
+            # Ineligible resources never enter scoring, regardless of score.
+            applicability = self._applicability_registry.get(key)
+            eligibility = is_resource_eligible(applicability, ctx)
+            if not eligibility.applicable:
+                # Ineligible for this project context; skip without scoring.
                 continue
             if not self._matches_conditions(
                 res_def, project_type_id, selected_caps, stack_bundle_id
@@ -618,6 +672,194 @@ class ResourceResolver:
             if entry.get("project_type") == project_type_id:
                 return entry.get("resources", [])
         return []
+
+    def _load_all_requirements(self) -> list[dict]:
+        """Load all resource-requirements.yaml entries (every project type)."""
+        path = DEFAULT_CATALOG_DIR / "resource-requirements.yaml"
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return []
+        if not isinstance(data, dict):
+            return []
+        requirements = data.get("resource_requirements", [])
+        if not isinstance(requirements, list):
+            return []
+        return requirements
+
+    def _stack_tags_for_bundle(self, stack_bundle_id: str) -> frozenset[str]:
+        """Derive stack technology tags from the bundle's technologies."""
+        if not stack_bundle_id:
+            return frozenset()
+        path = DEFAULT_CATALOG_DIR / "stack-bundles.yaml"
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return frozenset()
+        bundles = data.get("stack_bundles", [])
+        if not isinstance(bundles, list):
+            return frozenset()
+        for bundle in bundles:
+            if str(bundle.get("id")) != stack_bundle_id:
+                continue
+            tags: set[str] = set()
+            for role_value in bundle.get("technologies", {}).values():
+                if role_value:
+                    tags.add(str(role_value))
+            # The bundle id itself is also a useful stack tag.
+            tags.add(stack_bundle_id)
+            return frozenset(tags)
+        return frozenset()
+
+    def _merge_applicability(
+        self, base: Applicability, overlay: Applicability
+    ) -> Applicability:
+        """Merge two applicability records for the same (type, id).
+
+        Lists are unioned (permissive); exclusions are unioned so any
+        explicitly-excluded project type wins. Booleans are OR'd.
+        """
+        return Applicability(
+            id=base.id,
+            type=base.type,
+            project_types_include=frozenset(
+                set(base.project_types_include) | set(overlay.project_types_include)
+            ),
+            project_types_exclude=frozenset(
+                set(base.project_types_exclude) | set(overlay.project_types_exclude)
+            ),
+            capabilities_any=frozenset(
+                set(base.capabilities_any) | set(overlay.capabilities_any)
+            ),
+            capabilities_all=frozenset(
+                set(base.capabilities_all) | set(overlay.capabilities_all)
+            ),
+            capabilities_none=frozenset(
+                set(base.capabilities_none) | set(overlay.capabilities_none)
+            ),
+            stack_tags_any=frozenset(
+                set(base.stack_tags_any) | set(overlay.stack_tags_any)
+            ),
+            stack_tags_all=frozenset(
+                set(base.stack_tags_all) | set(overlay.stack_tags_all)
+            ),
+            task_tags_any=frozenset(
+                set(base.task_tags_any) | set(overlay.task_tags_any)
+            ),
+            reusable=base.reusable or overlay.reusable,
+            is_global=base.is_global or overlay.is_global,
+            requires=frozenset(set(base.requires) | set(overlay.requires)),
+            conflicts_with=frozenset(
+                set(base.conflicts_with) | set(overlay.conflicts_with)
+            ),
+        )
+
+    def _build_applicability_registry(
+        self,
+    ) -> dict[tuple[str, str], Applicability]:
+        """Build a resource-centric applicability registry.
+
+        Each (type, id) maps to an Applicability derived from the
+        resource-requirements.yaml entries. Entries for the same resource
+        are merged (lists unioned; exclusions unioned). A resource that is
+        ineligible for a project context never enters scoring (Section 6).
+        """
+        registry: dict[tuple[str, str], Applicability] = {}
+        for entry in self._load_all_requirements():
+            resources = entry.get("resources", [])
+            if not isinstance(resources, list):
+                continue
+            for res_def in resources:
+                rid = res_def.get("id")
+                rtype = res_def.get("type")
+                if not rid or not rtype:
+                    continue
+                key = (rtype, rid)
+                app = self._applicability_from_entry(res_def)
+                if key in registry:
+                    registry[key] = self._merge_applicability(registry[key], app)
+                else:
+                    registry[key] = app
+        return registry
+
+    def _applicability_from_entry(self, res_def: dict) -> Applicability:
+        """Derive an Applicability from a single resource-requirements entry."""
+        rid = str(res_def.get("id", ""))
+        rtype = str(res_def.get("type", ""))
+        app = res_def.get("applicability")
+        if not isinstance(app, dict):
+            app = {}
+        when = res_def.get("when")
+        if not isinstance(when, dict):
+            when = {}
+
+        project_types_include: set[str] = set(
+            str(p) for p in (app.get("project_types_include") or [])
+        )
+        project_types_exclude: set[str] = set(
+            str(p) for p in (app.get("project_types_exclude") or [])
+        )
+        capabilities_any: set[str] = set(
+            str(c) for c in (app.get("capabilities_any") or [])
+        )
+        capabilities_all: set[str] = set(
+            str(c) for c in (app.get("capabilities_all") or [])
+        )
+        capabilities_none: set[str] = set(
+            str(c) for c in (app.get("capabilities_none") or [])
+        )
+        stack_tags_any: set[str] = set(
+            str(t) for t in (app.get("stack_tags_any") or [])
+        )
+        stack_tags_all: set[str] = set(
+            str(t) for t in (app.get("stack_tags_all") or [])
+        )
+        task_tags_any: set[str] = set(
+            str(t) for t in (app.get("task_tags_any") or [])
+        )
+
+        # Derive capability / stack gating from `when` when explicit
+        # applicability fields are absent, so existing `when` entries keep
+        # their eligibility semantics.
+        w_caps_any = when.get("capabilities_any")
+        if isinstance(w_caps_any, list) and not capabilities_any:
+            capabilities_any.update(str(c) for c in w_caps_any)
+        w_caps_all = when.get("capabilities_all")
+        if isinstance(w_caps_all, list) and not capabilities_all:
+            capabilities_all.update(str(c) for c in w_caps_all)
+        w_bundles = when.get("stack_bundles")
+        if isinstance(w_bundles, list) and not stack_tags_any:
+            stack_tags_any.update(str(b) for b in w_bundles)
+
+        requires: set[tuple[str, str]] = set()
+        for req in (app.get("requires") or []):
+            if isinstance(req, list) and len(req) == 2:
+                requires.add((str(req[0]), str(req[1])))
+        conflicts: set[tuple[str, str]] = set()
+        for conf in (app.get("conflicts_with") or []):
+            if isinstance(conf, list) and len(conf) == 2:
+                conflicts.add((str(conf[0]), str(conf[1])))
+
+        return Applicability(
+            id=rid,
+            type=rtype,
+            project_types_include=frozenset(project_types_include),
+            project_types_exclude=frozenset(project_types_exclude),
+            capabilities_any=frozenset(capabilities_any),
+            capabilities_all=frozenset(capabilities_all),
+            capabilities_none=frozenset(capabilities_none),
+            stack_tags_any=frozenset(stack_tags_any),
+            stack_tags_all=frozenset(stack_tags_all),
+            task_tags_any=frozenset(task_tags_any),
+            reusable=bool(app.get("reusable", False)),
+            is_global=bool(
+                app.get("global", False) or app.get("is_global", False)
+            ),
+            requires=frozenset(requires),
+            conflicts_with=frozenset(conflicts),
+        )
 
     def _make_selection(
         self,
