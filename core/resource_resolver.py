@@ -2,8 +2,8 @@
 Resource resolver for AI-Coding-starter V2 Milestone M12 / M6.3-M6.4.
 
 Resolves project type + capabilities + stack bundle (+ optional execution
-pack) to a bounded set of resource selections (id, type, version,
-provenance, selection_reason).
+pack) to a bounded set of resource selections (id, type, version, provenance,
+selection_reason).
 
 Architecture:
     project type ID + capabilities + stack bundle ID [+ execution pack]
@@ -21,8 +21,14 @@ Design principles:
   * Stdlib-only.
   * Honest inference: never guesses resource IDs; validates against registry.
   * (type, id) collision-safe.
+  * Capability-gated: a resource is activated ONLY when its explicit `when`
+    condition matches the resolved project context. Free-form `selection_reason`
+    always describes what actually triggered selection.
   * Bounded activation: full catalog is knowledge base; resolver activates only
-    a small team per project (default core 2-5, total <= 8, hard ceiling 10).
+    a small team per project. Agent count follows a complexity-aware budget
+    (minimal/static 4-6, balanced 5-8, complex 6-10, hard ceiling 10).
+  * Specialty-aware: Agency agents are ranked by an explainable deterministic
+    score; alphabetical id is only the final tie-break.
 """
 
 from __future__ import annotations
@@ -56,12 +62,23 @@ RESOURCE_TYPE_TO_DIR = {
     "rule": "rules",
 }
 
-# Team size policy (M6.4 / Section 13).
+# Team size policy (M6.4 / Section 13 / Section 17).
 DEFAULT_TEAM_CEILING = 8      # typical total ceiling
 HARD_TEAM_CEILING = 10        # hard default ceiling (override only by explicit pack)
 CORE_TEAM_MIN = 2             # project-planner + orchestrator
 CORE_TEAM_MAX = 5
 SPECIALIST_MAX = 5
+
+# Complexity-aware agent budget by stack bundle profile.
+# (min agents, max agents). Hard ceiling always applies.
+PROFILE_AGENT_BUDGET: dict[str, tuple[int, int]] = {
+    "minimal": (4, 6),
+    "fastest-mvp": (5, 8),
+    "balanced": (5, 8),
+    "scalable": (6, 10),
+    "custom": (5, 8),
+}
+DEFAULT_AGENT_BUDGET = (5, 8)  # used when the bundle profile is unknown
 
 # Agency division → relevant project type IDs (explicit, deterministic).
 # Used to rank agency specialists for a given project type. Divisions not
@@ -108,6 +125,7 @@ class ResourceSelection:
     across different types (e.g. agent:security-auditor vs
     skill:security-auditor) are treated as distinct.
     """
+
     id: str
     type: str  # agent | skill | shared-module | workflow | script | template | rule
     version: str = "1.0.0"
@@ -118,6 +136,9 @@ class ResourceSelection:
     name: str = ""
     description: str = ""
     division: str = ""
+    # Specialty-aware scoring (Agency agents). Bundled resources score 0.
+    score: int = 0
+    score_breakdown: list[tuple[str, int]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -130,6 +151,7 @@ class ResourceSelectionResult:
     stack_bundle_id: str = ""
     execution_pack_id: Optional[str] = None
     errors: list[str] = field(default_factory=list)
+    agent_budget: tuple[int, int] = field(default_factory=lambda: DEFAULT_AGENT_BUDGET)
 
     @property
     def ok(self) -> bool:
@@ -140,6 +162,15 @@ class ResourceSelectionResult:
         """Map keyed by (type, id) for collision-safe lookup."""
         return {(r.type, r.id): r for r in self.resources}
 
+    @property
+    def agents(self) -> list[ResourceSelection]:
+        """Selected agent resources, in result order."""
+        return [r for r in self.resources if r.type == "agent"]
+
+    @property
+    def agent_count(self) -> int:
+        return len(self.agents)
+
 
 class ResourceResolver:
     """Deterministic, bounded resource resolver.
@@ -149,14 +180,14 @@ class ResourceResolver:
 
     Resolution priority (§12):
       1. Execution pack core roles (highest priority)
-      2. Project-type-relevant bundled resources
-      3. Capability-driven bundled resources
-      4. Agency specialists relevant to project type (division match)
+      2. Project-type-relevant bundled resources (when conditions match)
+      3. Capability/stack-driven bundled resources (when conditions match)
+      4. Agency specialists relevant to project type (scored, specialty-aware)
       5. Quality/safety roles (implied by capabilities)
 
-    Team size policy (§13):
-      Core 2-5 agents, specialists 0-5 agents, total <= 8,
-      hard ceiling 10 agents.
+    Team size policy (§13 / §17):
+      Agent count follows a complexity-aware budget derived from the stack
+      bundle profile, bounded by HARD_TEAM_CEILING (10).
     """
 
     def __init__(
@@ -195,8 +226,13 @@ class ResourceResolver:
         selected_caps = sorted({str(c) for c in (selected_capability_ids or [])})
         stack_bundle_id = str(stack_bundle_id or "")
 
+        # --- Complexity-aware agent budget from the stack bundle profile ---
+        agent_budget = self._agent_budget_for_bundle(stack_bundle_id)
+        agent_ceiling = min(agent_budget[1], HARD_TEAM_CEILING)
+
         # --- 1. Execution pack core roles (highest priority) --------------
         pack = None
+        pack_core_roles: list[str] = []
         if execution_pack_id is not None and self.pack_registry is not None:
             pack = self.pack_registry.get(execution_pack_id)
             if pack is None:
@@ -204,7 +240,8 @@ class ResourceResolver:
                     f"Execution pack not found: {execution_pack_id!r}"
                 )
             else:
-                for role_id in pack.core_roles:
+                pack_core_roles = list(pack.core_roles)
+                for role_id in pack_core_roles:
                     key = ("agent", role_id)
                     if key in seen:
                         continue
@@ -213,6 +250,10 @@ class ResourceResolver:
                         self._make_selection(
                             "agent", role_id,
                             f"execution-pack:{pack.id} core-role",
+                            pack_core_roles=pack_core_roles,
+                            selected_caps=selected_caps,
+                            project_type_id=project_type_id,
+                            stack_bundle_id=stack_bundle_id,
                         )
                     )
 
@@ -242,64 +283,99 @@ class ResourceResolver:
                         "agent", opt_role.resource_id,
                         f"execution-pack:{pack.id} optional-role "
                         f"({opt_role.activation})",
+                        pack_core_roles=pack_core_roles,
+                        selected_caps=selected_caps,
+                        project_type_id=project_type_id,
+                        stack_bundle_id=stack_bundle_id,
                     )
                 )
 
-        # --- 3. Project-type-relevant bundled resources --------------------
+        # --- 3. Project-type + capability/stack-driven bundled resources --
+        # Every base resource carries an explicit `when` condition. A resource
+        # is activated ONLY when its condition matches the resolved context.
+        # This replaces the old free-form "capability:<id>" reason parsing.
         pt_resources = self._load_project_type_resources(project_type_id)
         for res_def in pt_resources:
             rid = res_def.get("id", "")
             rtype = res_def.get("type", "")
-            reason = res_def.get("reason", f"project-type:{project_type_id}")
             if not rid or not rtype:
                 errors.append(f"Invalid resource entry: missing id or type: {res_def}")
                 continue
             key = (rtype, rid)
             if key in seen:
                 continue
-            seen.add(key)
             if not self._registry_has(rtype, rid):
                 errors.append(f"Resource not found in registry: {rtype}:{rid}")
                 continue
-            resources.append(self._make_selection(rtype, rid, reason))
-
-        # --- 4. Capability-driven bundled resources -----------------------
-        cap_to_resources = self._build_capability_map(pt_resources)
-        for cap_id in selected_caps:
-            for defn in cap_to_resources.get(cap_id, []):
-                rid = defn["id"]
-                rtype = defn["type"]
-                key = (rtype, rid)
-                if key in seen:
-                    continue
-                if not self._registry_has(rtype, rid):
-                    errors.append(
-                        f"Resource not found in registry: {rtype}:{rid} "
-                        f"(capability: {cap_id})"
-                    )
-                    continue
-                seen.add(key)
-                resources.append(self._make_selection(rtype, rid, defn["reason"]))
-
-        # --- 5. Agency specialists relevant to project type --------------
-        agency_agents = self._select_agency_specialists(project_type_id)
-        # Count agents so far (pack core + optional + bundled agents)
-        agent_count = sum(1 for r in resources if r.type == "agent")
-        agent_slots_remaining = max(0, HARD_TEAM_CEILING - agent_count)
-        for agent in agency_agents[:agent_slots_remaining]:
-            if agent_count >= HARD_TEAM_CEILING:
-                break
-            key = ("agent", agent.id)
-            if key in seen:
+            if not self._matches_conditions(
+                res_def, project_type_id, selected_caps, stack_bundle_id
+            ):
+                # Condition not met: resource stays inactive for this project.
                 continue
             seen.add(key)
-            agent_count += 1
-            reason = f"agency-division:{agent.division} relevance to project-type:{project_type_id}"
-            resources.append(self._make_selection("agent", agent.id, reason))
+            reason = self._selection_reason(
+                res_def, project_type_id, selected_caps, stack_bundle_id
+            )
+            resources.append(
+                self._make_selection(
+                    rtype, rid, reason,
+                    pack_core_roles=pack_core_roles,
+                    selected_caps=selected_caps,
+                    project_type_id=project_type_id,
+                    stack_bundle_id=stack_bundle_id,
+                )
+            )
 
-        # --- 6. Enforce team size ceiling ---------------------------------
+        # --- 4. Agency specialists relevant to project type (scored) ------
+        # Count agents so far (pack core + optional + bundled agents).
+        agent_count = sum(1 for r in resources if r.type == "agent")
+        agent_slots_remaining = max(0, agent_ceiling - agent_count)
+        if agent_slots_remaining > 0:
+            agency_agents = self._select_agency_specialists(
+                project_type_id,
+                selected_caps,
+                stack_bundle_id,
+                pack_core_roles,
+                limit=agent_slots_remaining,
+            )
+            for agent in agency_agents:
+                if agent_count >= agent_ceiling:
+                    break
+                key = ("agent", agent.id)
+                if key in seen:
+                    continue
+                seen.add(key)
+                agent_count += 1
+                score, breakdown = self._score_agency_agent(
+                    agent, project_type_id, selected_caps,
+                    stack_bundle_id, pack_core_roles
+                )
+                reason = (
+                    f"agency-division:{agent.division} relevance to "
+                    f"project-type:{project_type_id} (score {score})"
+                )
+                resources.append(
+                    ResourceSelection(
+                        id=agent.id,
+                        type="agent",
+                        version="1.0.0",
+                        provenance_source=agent.provenance.get("source", "agency-agents"),
+                        provenance_commit_sha=agent.provenance.get(
+                            "upstream_commit",
+                            "8b61d297dc07772a000b85fc93138c8aefd21c45",
+                        ),
+                        provenance_license=agent.provenance.get("license", "MIT"),
+                        selection_reason=reason,
+                        name=agent.name,
+                        description=agent.description,
+                        division=agent.division,
+                        score=score,
+                        score_breakdown=breakdown,
+                    )
+                )
+
+        # --- 5. Enforce team size ceiling ---------------------------------
         if agent_count > HARD_TEAM_CEILING:
-            # Should not happen due to slots logic, but keep as safety net.
             agent_resources = [r for r in resources if r.type == "agent"]
             non_agent = [r for r in resources if r.type != "agent"]
             resources = non_agent + agent_resources[:HARD_TEAM_CEILING]
@@ -318,9 +394,208 @@ class ResourceResolver:
             stack_bundle_id=stack_bundle_id,
             execution_pack_id=execution_pack_id,
             errors=errors,
+            agent_budget=agent_budget,
         )
 
+    # -- condition evaluation ----------------------------------------------
+    def _matches_conditions(
+        self,
+        defn: dict,
+        project_type_id: str,
+        selected_caps: list[str],
+        stack_bundle_id: str,
+    ) -> bool:
+        """Evaluate a resource entry's explicit `when` activation condition.
+
+        Returns True when the resource should be activated for the resolved
+        project context. Missing or empty `when` defaults to `always` for
+        backward compatibility with older catalog entries.
+        """
+        when = defn.get("when")
+        if not when:
+            return True
+        if not isinstance(when, dict):
+            return True
+        if when.get("always"):
+            return True
+        caps_any = when.get("capabilities_any")
+        if isinstance(caps_any, list) and caps_any:
+            if any(str(c) in selected_caps for c in caps_any):
+                return True
+        caps_all = when.get("capabilities_all")
+        if isinstance(caps_all, list) and caps_all:
+            if all(str(c) in selected_caps for c in caps_all):
+                return True
+        bundles = when.get("stack_bundles")
+        if isinstance(bundles, list) and bundles:
+            if stack_bundle_id in bundles:
+                return True
+        ptypes = when.get("project_types")
+        if isinstance(ptypes, list) and ptypes:
+            if project_type_id in ptypes:
+                return True
+        return False
+
+    def _selection_reason(
+        self,
+        defn: dict,
+        project_type_id: str,
+        selected_caps: list[str],
+        stack_bundle_id: str,
+    ) -> str:
+        """Describe what actually triggered selection of a resource."""
+        reason = defn.get("reason", f"project-type:{project_type_id}")
+        when = defn.get("when") or {}
+        if not isinstance(when, dict):
+            return reason
+        if when.get("always"):
+            return reason
+        caps_any = when.get("capabilities_any")
+        if isinstance(caps_any, list) and caps_any:
+            matched = [c for c in caps_any if str(c) in selected_caps]
+            if matched:
+                return f"capability:{matched[0]}"
+        caps_all = when.get("capabilities_all")
+        if isinstance(caps_all, list) and caps_all:
+            return f"capability:{','.join(caps_all)}"
+        bundles = when.get("stack_bundles")
+        if isinstance(bundles, list) and bundles and stack_bundle_id in bundles:
+            return f"stack-bundle:{stack_bundle_id}"
+        ptypes = when.get("project_types")
+        if isinstance(ptypes, list) and ptypes and project_type_id in ptypes:
+            return f"project-type:{project_type_id}"
+        return reason
+
+    # -- agency scoring ----------------------------------------------------
+    def _relevant_divisions(self, project_type_id: str) -> set[str]:
+        return {
+            div for div, pts in DIVISION_PROJECT_TYPE_RELEVANCE.items()
+            if project_type_id in pts
+        }
+
+    def _score_agency_agent(
+        self,
+        agent,
+        project_type_id: str,
+        selected_caps: list[str],
+        stack_bundle_id: str,
+        pack_core_roles: list[str],
+    ) -> tuple[int, list[tuple[str, int]]]:
+        """Explainable deterministic score for an agency agent.
+
+        Relative priority (§15):
+          execution-pack core role +100
+          capability match +40
+          project-type match +30
+          stack/technology match +20
+          specialty/tag match +10
+          division relevance +5
+          alphabetical id is the final tie-break (applied by the caller).
+        """
+        score = 0
+        breakdown: list[tuple[str, int]] = []
+
+        agent_id = str(agent.id)
+        divisions = set(agent.division) if agent.division else set()
+        relevant_divisions = self._relevant_divisions(project_type_id)
+
+        # 1. Execution pack core role match (+100)
+        if agent_id in set(pack_core_roles):
+            score += 100
+            breakdown.append(("execution-pack-core-role", 100))
+
+        # 2. Selected capability match (+40)
+        agent_caps = set(str(c) for c in (agent.capabilities or []))
+        cap_matches = agent_caps & set(selected_caps)
+        if cap_matches:
+            score += 40
+            breakdown.append(("capability-match", 40))
+
+        # 3. Project-type match (+30)
+        agent_ptypes = set(str(p) for p in (agent.project_types or []))
+        if project_type_id and project_type_id in agent_ptypes:
+            score += 30
+            breakdown.append(("project-type-match", 30))
+
+        # 4. Stack/technology match (+20): agent tags matching the stack bundle
+        #    id or the project-type-aligned technology hints carried in tags.
+        agent_tags = set(str(t) for t in (agent.tags or []))
+        stack_hint = {stack_bundle_id} if stack_bundle_id else set()
+        stack_matches = agent_tags & stack_hint
+        if stack_matches:
+            score += 20
+            breakdown.append(("stack-technology-match", 20))
+
+        # 5. Specialty/tag match (+10): agent tags matching selected capabilities
+        tag_matches = agent_tags & set(selected_caps)
+        if tag_matches:
+            score += 10
+            breakdown.append(("specialty-tag-match", 10))
+
+        # 6. Division relevance (+5)
+        if agent.division and agent.division in relevant_divisions:
+            score += 5
+            breakdown.append(("division-relevance", 5))
+
+        return score, breakdown
+
+    def _select_agency_specialists(
+        self,
+        project_type_id: str,
+        selected_caps: list[str],
+        stack_bundle_id: str,
+        pack_core_roles: list[str],
+        limit: int = SPECIALIST_MAX,
+    ) -> list:
+        """Select agency agents relevant to the project type, scored.
+
+        Agents are ranked by descending score with the agent id as the final
+        deterministic tie-break. Returns up to ``limit`` entries.
+        """
+        relevant_divisions = self._relevant_divisions(project_type_id)
+        if not relevant_divisions or limit <= 0:
+            return []
+
+        candidates: list = []
+        for agent in self.registry.list_agents():
+            if agent.division in relevant_divisions:
+                candidates.append(agent)
+        if not candidates:
+            return []
+
+        pack_core_set = set(pack_core_roles)
+        scored = []
+        for agent in candidates:
+            score, breakdown = self._score_agency_agent(
+                agent, project_type_id, selected_caps,
+                stack_bundle_id, pack_core_roles,
+            )
+            scored.append((score, agent.id, agent, breakdown))
+
+        # Descending score; final tie-break ascending id (deterministic).
+        scored.sort(key=lambda item: (-item[0], item[1]))
+        return [item[2] for item in scored[:limit]]
+
     # -- helpers ------------------------------------------------------------
+    def _agent_budget_for_bundle(self, stack_bundle_id: str) -> tuple[int, int]:
+        """Derive the complexity-aware agent budget from the stack bundle profile."""
+        if not stack_bundle_id:
+            return DEFAULT_AGENT_BUDGET
+        path = DEFAULT_CATALOG_DIR / "stack-bundles.yaml"
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return DEFAULT_AGENT_BUDGET
+        bundles = data.get("stack_bundles", [])
+        if not isinstance(bundles, list):
+            return DEFAULT_AGENT_BUDGET
+        for bundle in bundles:
+            if str(bundle.get("id")) == stack_bundle_id:
+                profile = str(bundle.get("profile", ""))
+                return PROFILE_AGENT_BUDGET.get(profile, DEFAULT_AGENT_BUDGET)
+        return DEFAULT_AGENT_BUDGET
+
     def _registry_has(self, rtype: str, rid: str) -> bool:
         return self.registry.get(rtype, rid) is not None
 
@@ -344,47 +619,22 @@ class ResourceResolver:
                 return entry.get("resources", [])
         return []
 
-    def _build_capability_map(
-        self, pt_resources: list[dict]
-    ) -> dict[str, list[dict]]:
-        cap_to_resources: dict[str, list[dict]] = {}
-        for defn in pt_resources:
-            reason = defn.get("reason", "")
-            if reason.startswith("capability:"):
-                cap_id = reason[len("capability:"):]
-                cap_to_resources.setdefault(cap_id, []).append(defn)
-        return cap_to_resources
-
-    def _select_agency_specialists(
-        self, project_type_id: str
-    ) -> list:
-        """Select agency agents relevant to the project type.
-
-        Returns agents sorted deterministically by id. Limited to
-        SPECIALIST_MAX entries (caller enforces total ceiling).
-        """
-        relevant_divisions = {
-            div for div, pts in DIVISION_PROJECT_TYPE_RELEVANCE.items()
-            if project_type_id in pts
-        }
-        if not relevant_divisions:
-            return []
-
-        candidates: list = []
-        for agent in self.registry.list_agents():
-            if agent.division in relevant_divisions:
-                candidates.append(agent)
-        candidates.sort(key=lambda a: a.id)
-        return candidates[:SPECIALIST_MAX]
-
     def _make_selection(
         self,
         rtype: str,
         rid: str,
         reason: str,
+        pack_core_roles: Optional[list[str]] = None,
+        selected_caps: Optional[list[str]] = None,
+        project_type_id: str = "",
+        stack_bundle_id: str = "",
     ) -> ResourceSelection:
         """Build a ResourceSelection, populating name/description + provenance
-        from the registry ref (falls back to bundled defaults when ref absent)."""
+        from the registry ref (falls back to bundled defaults when ref absent).
+
+        Bundled resources always score 0; agency agents are scored by the
+        caller when relevant.
+        """
         DEFAULT_SHA = "8b61d297dc07772a000b85fc93138c8aefd21c45"
         ref = self.registry.get(rtype, rid)
         prov = ref.provenance if ref else {}
@@ -399,6 +649,8 @@ class ResourceResolver:
             name=(ref.name if ref else rid),
             description=(ref.description if ref else ""),
             division=(ref.division if ref else ""),
+            score=0,
+            score_breakdown=[],
         )
 
 
@@ -425,7 +677,10 @@ def resolve_resources(
         resources_root = Path(__file__).resolve().parent.parent / "resources"
 
     agency_catalog_path = catalog_dir / "agency-agents.yaml"
-    registry = ResourceCatalogLoader(resources_root, agency_catalog_path).load()
+    enrichment_catalog_path = catalog_dir / "agency-enrichment.yaml"
+    registry = ResourceCatalogLoader(
+        resources_root, agency_catalog_path, enrichment_catalog_path
+    ).load()
 
     if pack_registry is None:
         pack_registry = build_default_pack_registry(

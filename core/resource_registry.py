@@ -36,6 +36,10 @@ class CanonicalResourceRef:
     description: str = ""
     capabilities: list[str] = field(default_factory=list)
     project_types: list[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
+    specialties: list[str] = field(default_factory=list)
+    stack_tags: list[str] = field(default_factory=list)
+    task_tags: list[str] = field(default_factory=list)
     provenance: dict = field(default_factory=dict)
 
     def matches_project_type(self, project_type_id: str) -> bool:
@@ -119,10 +123,14 @@ class ResourceCatalogLoader:
         self,
         resources_root: Path,
         agency_catalog_path: Optional[Path] = None,
+        enrichment_catalog_path: Optional[Path] = None,
     ) -> None:
         self.resources_root = Path(resources_root)
         self.agency_catalog_path = (
             Path(agency_catalog_path) if agency_catalog_path else None
+        )
+        self.enrichment_catalog_path = (
+            Path(enrichment_catalog_path) if enrichment_catalog_path else None
         )
 
     def load(self) -> ResourceRegistry:
@@ -130,6 +138,7 @@ class ResourceCatalogLoader:
         registry = ResourceRegistry()
         self._load_bundled(registry)
         self._load_agency(registry)
+        self._apply_enrichment(registry)
         return registry
 
     # -- bundled ------------------------------------------------------------
@@ -189,14 +198,76 @@ class ResourceCatalogLoader:
                 description=str(item.get("description", "")),
                 capabilities=list(item.get("capabilities", []) or []),
                 project_types=list(item.get("project_types", []) or []),
+                tags=list(item.get("tags", []) or []),
                 provenance=dict(item.get("provenance", {})),
             )
             registry.add(ref)
 
+    # -- enrichment -----------------------------------------------------------
+    def _apply_enrichment(self, registry: ResourceRegistry) -> None:
+        """Merge maintainer-controlled specialization overlay into agency refs.
+
+        The enrichment file (``catalog/agency-enrichment.yaml``) is authored
+        by maintainers and never modifies the upstream agency catalog. For each
+        matched agency agent it merges ``capabilities``/``project_types``/
+        ``tags`` and sets ``specialties``/``stack_tags``/``task_tags`` used by
+        the resolver's specialty-aware scoring. Unmatched entries are ignored.
+        """
+        path = self.enrichment_catalog_path
+        if path is None or not path.is_file():
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        except (OSError, ValueError):
+            return
+        entries = data.get("agents", [])
+        if not isinstance(entries, list):
+            return
+        overlay: dict[str, dict] = {}
+        for item in entries:
+            if not isinstance(item, dict):
+                continue
+            rid = item.get("id")
+            if rid:
+                overlay[str(rid)] = item
+        if not overlay:
+            return
+        for agent in list(registry.list_agents()):
+            if agent.source != "agency-agents":
+                continue
+            ov = overlay.get(agent.id)
+            if not ov:
+                continue
+            merged_caps = list(dict.fromkeys(
+                list(agent.capabilities) + list(ov.get("capabilities", []) or [])
+            ))
+            merged_ptypes = list(dict.fromkeys(
+                list(agent.project_types) + list(ov.get("project_types", []) or [])
+            ))
+            merged_tags = list(dict.fromkeys(
+                list(agent.tags) + list(ov.get("tags", []) or [])
+            ))
+            registry.add(CanonicalResourceRef(
+                id=agent.id,
+                type=agent.type,
+                source=agent.source,
+                division=agent.division,
+                name=agent.name,
+                description=agent.description,
+                capabilities=merged_caps,
+                project_types=merged_ptypes,
+                tags=merged_tags,
+                specialties=list(ov.get("specialties", []) or []),
+                stack_tags=list(ov.get("stack_tags", []) or []),
+                task_tags=list(ov.get("task_tags", []) or []),
+                provenance=dict(agent.provenance),
+            ))
 
 def build_default_registry(
     resources_root: Optional[Path] = None,
     agency_catalog_path: Optional[Path] = None,
+    enrichment_catalog_path: Optional[Path] = None,
 ) -> ResourceRegistry:
     """Build the default registry (bundled + agency catalog)."""
     if resources_root is None:
@@ -205,5 +276,9 @@ def build_default_registry(
         agency_catalog_path = (
             Path(__file__).resolve().parent.parent.parent / "catalog" / "agency-agents.yaml"
         )
-    loader = ResourceCatalogLoader(resources_root, agency_catalog_path)
+    if enrichment_catalog_path is None:
+        enrichment_catalog_path = (
+            Path(__file__).resolve().parent.parent.parent / "catalog" / "agency-enrichment.yaml"
+        )
+    loader = ResourceCatalogLoader(resources_root, agency_catalog_path, enrichment_catalog_path)
     return loader.load()

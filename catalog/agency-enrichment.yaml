@@ -1,0 +1,81 @@
+{
+  "schema_version": "1.0.0",
+  "source": "ai-coding-starter-maintained",
+  "license": "MIT",
+  "imported_date": "2026-11-07",
+  "description": "Maintainer-controlled specialization overlay for Agency agents. Derived canonical metadata used for specialty-aware resolver scoring. Does NOT modify the upstream agency-agents.yaml body content.",
+  "agents": [
+    {
+      "id": "design-ui-designer",
+      "project_types": ["portfolio", "landing-page", "business-website", "saas"],
+      "capabilities": [],
+      "tags": ["design", "ui", "visual"],
+      "specialties": ["ui-design", "visual-design"],
+      "stack_tags": ["react", "tailwindcss"],
+      "task_tags": ["design", "ui"]
+    },
+    {
+      "id": "design-inclusive-visuals-specialist",
+      "project_types": ["portfolio", "landing-page"],
+      "capabilities": ["accessibility"],
+      "tags": ["accessibility", "inclusive-design", "wcag"],
+      "specialties": ["accessibility", "inclusive-visuals"],
+      "stack_tags": [],
+      "task_tags": ["accessibility", "visuals"]
+    },
+    {
+      "id": "design-ux-architect",
+      "project_types": ["portfolio", "saas", "business-website"],
+      "capabilities": [],
+      "tags": ["ux", "architecture"],
+      "specialties": ["ux", "information-architecture"],
+      "stack_tags": [],
+      "task_tags": ["ux"]
+    },
+    {
+      "id": "design-visual-storyteller",
+      "project_types": ["portfolio", "landing-page", "business-website"],
+      "capabilities": [],
+      "tags": ["design", "visuals", "storytelling"],
+      "specialties": ["visual-storytelling", "brand-visuals"],
+      "stack_tags": [],
+      "task_tags": ["design"]
+    },
+    {
+      "id": "engineering-frontend-developer",
+      "project_types": ["portfolio", "saas", "fullstack-application", "business-website"],
+      "capabilities": [],
+      "tags": ["frontend", "react", "typescript"],
+      "specialties": ["frontend-development"],
+      "stack_tags": ["react", "typescript"],
+      "task_tags": ["frontend", "development"]
+    },
+    {
+      "id": "project-planner",
+      "project_types": ["portfolio", "saas", "fullstack-application", "business-website"],
+      "capabilities": [],
+      "tags": ["planning", "orchestration"],
+      "specialties": ["project-planning"],
+      "stack_tags": [],
+      "task_tags": ["planning"]
+    },
+    {
+      "id": "orchestrator",
+      "project_types": ["portfolio", "saas", "fullstack-application"],
+      "capabilities": [],
+      "tags": ["orchestration", "coordination"],
+      "specialties": ["orchestration"],
+      "stack_tags": [],
+      "task_tags": ["orchestration"]
+    },
+    {
+      "id": "seo-specialist",
+      "project_types": ["portfolio", "landing-page", "business-website", "blog-content"],
+      "capabilities": ["search"],
+      "tags": ["seo", "search"],
+      "specialties": ["search-engine-optimization"],
+      "stack_tags": [],
+      "task_tags": ["seo"]
+    }
+  ]
+}
