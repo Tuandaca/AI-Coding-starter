@@ -16,6 +16,7 @@ Or via Antigravity chat:
 import os
 import sys
 import shutil
+import importlib
 from pathlib import Path
 
 # ============================================
@@ -29,6 +30,7 @@ import json
 # below remain available for backward-compatible characterization tests.
 from core.catalog_loader import load_catalog, DEFAULT_CATALOG_DIR
 from core.resolver import resolve_top, NOT_DECIDED
+from core.resource_resolver import resolve_resources
 
 # M4: portable canonical state + derived Markdown (separate layer; the M3
 # resolver stays pure and never writes files).
@@ -46,6 +48,10 @@ from core.state import (
     write_state,
 )  # noqa: E402
 from core.portable_renderer import render_all  # noqa: E402
+
+# generic-renderer.py has a hyphen in its file name, so use importlib.
+_generic_renderer_mod = importlib.import_module("core.generic-renderer")  # noqa: E402
+GenericRenderer = _generic_renderer_mod.GenericRenderer  # noqa: E402
 
 CONFIG_FILE = Path(__file__).parent / "config.json"
 # Bundled resources are the DEFAULT source
@@ -1072,6 +1078,9 @@ BUNDLED_PROVENANCE = {
     "transformation": "none",
 }
 
+# Reviewed date applied to bundled resource provenance in the resources lock.
+BUNDLED_REVIEWED_DATE = "2026-11-06"
+
 # Resource categories always copied into every generated project (not
 # driven by project-type selection), mapped to canonical resource IDs.
 ALWAYS_INCLUDED = [
@@ -1725,7 +1734,20 @@ def bundle_to_tech_stack(bundle, project_type_name=None):
 # ============================================
 
 def main():
-    """Main wizard flow."""
+    """Main wizard flow for AI-Coding-starter V2.
+
+    Flow:
+      1. Detect environment (Python, resources, etc.)
+      2. Collect project identity (name, path)
+      3. Select project type -> capabilities -> resolver -> ONE bundle
+      4. Resolve resources using declarative adapter model
+      5. Select runtime adapter (portable/codex/opencode/antigravity/claude-code/cursor)
+      6. Build canonical state IN MEMORY (spec, state, lock)
+      7. Show preview of what will be created
+      8. Get explicit user confirmation
+      9. AFTER confirmation: write canonical state, copy resources,
+         render Markdown, install runtime adapter
+    """
 
     print_header()
 
@@ -1751,58 +1773,60 @@ def main():
         "tools": check_tools(),
         "os_info": detect_os_info()
     }
-    print(f"    🖥️  System: {env_info['os_info']['os']} | Shell: {env_info['os_info']['shell']}")
-    print(f"    👤 Git User: {env_info['git_user']['name']} <{env_info['git_user']['email']}>\n")
+    print(f"    System: {env_info['os_info']['os']} | Shell: {env_info['os_info']['shell']}")
+    _gu = env_info['git_user']
+    _name = _gu['name']
+    _email = _gu['email']
+    print(f"    Git User: {_name} <{_email}>\n")
 
     # Step 1: Get project name
-    project_name = get_input("Tên dự án", "my-project")
+    project_name = get_input("Ten du an", "my-project")
 
     # Validate project name
     project_name = project_name.replace(" ", "-").lower()
 
-    # Step 3: Get project path
-    project_path = get_input("Đường dẫn dự án", str(DEFAULT_PROJECT_PATH))
+    # Step 2: Get project path
+    project_path = get_input("Duong dan du an", str(DEFAULT_PROJECT_PATH))
     project_path = Path(project_path)
 
     # Ensure project path exists
     project_path.mkdir(parents=True, exist_ok=True)
 
     full_project_path = project_path / project_name
-    agent_path = full_project_path / ".agent"
 
-    # Check if already exists
-    if agent_path.exists():
-        overwrite = get_input(f"Dự án đã tồn tại! Ghi đè? (y/n)", "n")
-        if overwrite.lower() != 'y':
-            print_info("Đã hủy.")
-            sys.exit(0)
-        shutil.rmtree(agent_path)
+    # Check if already exists - reject if non-empty directory
+    if full_project_path.exists() and any(full_project_path.iterdir()):
+        print_error(f"Thu muc '{full_project_path}' da ton tai va khong trong!")
+        print_info("Vui long chon ten du an khac hoac thu muc khac.")
+        sys.exit(0)
 
-    # Step 4 (M3): Project type -> capabilities -> resolver -> ONE bundle.
-    # The catalog + resolver is authoritative; legacy TECH_PRESETS is NOT used.
+    # Step 3 (M3): Project type -> capabilities -> resolver -> ONE bundle.
     catalog = load_starter_catalog()
     project_type_id = select_project_type(catalog)
     selected_cap_ids = select_capabilities(catalog, project_type_id)
     resolution = resolve_stacks(catalog, project_type_id, selected_cap_ids)
     bundle_id = select_bundle(resolution, catalog)
     if bundle_id is None:
-        print_info("Đã hủy.")
+        print_info("Da huy.")
         sys.exit(0)
     bundle = catalog.stack_bundles[bundle_id]
     project_type_display = catalog.project_types[project_type_id].name
     tech_stack = bundle_to_tech_stack(bundle, project_type_display)
-    # M3 catalog project types are not in the legacy PROJECT_TYPES map, so the
-    # generator downstream receives an empty type list to avoid KeyError while
-    # still proceeding with one coherent stack bundle. The generated markdown
-    # uses tech_stack["project_type"] as the display name in that case.
-    selected_types = []
 
-    # Step 5b (M4): Portable canonical state generation (new-project only).
-    #   resolver result -> state builder -> state writer -> derived Markdown
-    # The M3 resolver stays pure; it never writes project.yaml/state.yaml/
-    # resources.lock. Canonical state lives in <project>/.ai-coding-starter/.
-    ai_state_dir = full_project_path / ".ai-coding-starter"
+    # Step 3b (M7): Resolve resources using declarative adapter model
+    resource_selection = resolve_resources(
+        project_type_id,
+        selected_cap_ids,
+        bundle_id,
+        catalog_dir=DEFAULT_CATALOG_DIR,
+        resources_root=BUNDLED_RESOURCE_ROOT,
+    )
+    if not resource_selection.ok:
+        for err in resource_selection.errors:
+            print_error(err)
+        sys.exit(1)
 
+    # Step 4 (M4): Build canonical state IN MEMORY (no writes yet)
     spec = build_project_spec(
         project_name,
         project_type_id=project_type_id,
@@ -1810,237 +1834,201 @@ def main():
         stack_bundle_id=bundle_id,
         description="",
     )
-    write_project_spec(ai_state_dir, spec)
-
     state = build_initial_state(
         str(spec.id),
         phase="planning",
         focus="",
-        canonical_branch=None,  # generator does not init Git for new projects
+        canonical_branch=None,
     )
-    write_state(ai_state_dir, state)
-
-    # M7: resources.lock is built after resource selection (merged requirements)
-    # so it reflects exactly the resources copied into this project.
-
-    # Derived Markdown (readable, one-way: canonical -> Markdown) at project root.
-    render_all(
-        full_project_path,
-        spec,
-        state,
-        last_session_summary=None,
-        last_session_next_steps=None,
-    )
-
-    # Step 6: Show summary and confirm
-    print("\n" + "-" * 60)
-    print("  📋 TÓM TẮT")
-    print("-" * 60)
-    print(f"  Tên dự án: {project_name}")
-    print(f"  Đường dẫn: {full_project_path}")
-    print(f"  Loại dự án: {project_type_display}")
-    print(f"  Năng lực: {', '.join(selected_cap_ids) if selected_cap_ids else '(không)'}")
-    print(f"  Stack bundle: {tech_stack['bundle_name']} ({tech_stack['bundle_id']})")
-
-    # Show tech stack summary
-    if tech_stack.get("type") == "preset":
-        preset_name = tech_stack.get('preset_name', 'Preset')
-        if ' + ' in preset_name:
-            print(f"  Tech Stack: Multi-preset")
-            for name in preset_name.split(' + '):
-                print(f"    • {name.strip()}")
-        else:
-            print(f"  Tech Stack: {preset_name}")
-    elif tech_stack.get("type") == "custom":
-        print(f"  Tech Stack: Custom ({tech_stack.get('frontend', '')})")
-    elif tech_stack.get("type") == "bundle":
-        print(f"  Tech Stack: {tech_stack.get('bundle_name', 'TBD')}")
-        print(f"    Bundle ID: {tech_stack.get('bundle_id', 'TBD')}")
-    else:
-        print("  Tech Stack: Skip (AI sẽ đề xuất sau)")
-
-    merged = merge_requirements(selected_types)
-    print(f"\n  Agents: {len(merged['agents'])}")
-    print(f"  Skills: {len(merged['skills'])}")
-    print(f"  Shared: {len(merged['shared'])}")
-    print(f"  Workflows: {len(merged['workflows'])}")
-    print(f"  Scripts: {len(merged['scripts'])}")
-    print("-" * 60)
-
-    # M7: Build resources.lock from exactly the resources selected for this
-    # project (merged requirements), not the entire bundled catalog.
-    lock_resources = _build_lock_resources(merged, selected_types, bundle_id)
     lock = build_resources_lock(
         bundle_id,
         requested_bundle_id=bundle_id,
-        resources=lock_resources,
+        resources=[
+            {
+                "id": r.id,
+                "type": r.type,
+                "version": r.version,
+                "provenance": {
+                    "source": r.provenance_source,
+                    "commit_sha": r.provenance_commit_sha,
+                    "license": r.provenance_license,
+                    "reviewed_date": BUNDLED_REVIEWED_DATE,
+                    "transformation": "none",
+                },
+                "selection_reason": r.selection_reason,
+            }
+            for r in resource_selection.resources
+        ]
     )
-    write_resources_lock(ai_state_dir, lock)
 
-    confirm = get_input("\nTạo dự án? (y/n)", "y")
+    # Step 5: Runtime selection
+    runtime_id = select_runtime()
+
+    # Step 6: Preview (show what will be created)
+    print_preview(
+        project_name, project_type_id, selected_cap_ids,
+        bundle_id, tech_stack, resource_selection, runtime_id,
+        full_project_path
+    )
+
+    # Step 7: Confirm
+    confirm = get_input("\nTao du an? (y/n)", "y")
     if confirm.lower() != 'y':
-        print_info("Đã hủy.")
+        print_info("Da huy.")
         sys.exit(0)
+
+    # Step 8: WRITE EVERYTHING (after confirmation only)
 
     # Create project folder
     full_project_path.mkdir(parents=True, exist_ok=True)
 
-    # Step 7: Copy files
-    print("\n" + "=" * 60)
-    print("  🚀 ĐANG TẠO DỰ ÁN...")
-    print("=" * 60)
+    # Write canonical state files
+    write_project_spec(full_project_path, spec)
+    write_state(full_project_path, state)
+    write_resources_lock(full_project_path, lock)
 
+    # Copy resources using resource selection
+    merged_req = _build_merge_req_from_selection(resource_selection)
     total_bytes = copy_selective(
         resource_root,
-        agent_path,
-        merged,
+        full_project_path,
+        merged_req,
         project_name,
-        selected_types,
+        [],
         tech_stack,
-        env_info  # Pass env_info to copy_selective
+        env_info
     )
 
-    # Create README.md for the project
-    readme_content = f'''# {project_name.replace("-", " ").title()}
+    # Render derived Markdown files
+    render_all(full_project_path, spec, state)
 
-> Created with VibeCoding Project Creator
+    # Install runtime adapter
+    if runtime_id != "portable":
+        renderer = GenericRenderer(full_project_path)
+        render_result = renderer.install(runtime_id)
+        if not render_result.ok:
+            for err in render_result.errors:
+                print_error(err)
+        else:
+            print_success(f"Runtime adapter '{runtime_id}' installed")
 
-## Project Types
-{chr(10).join([f"- {PROJECT_TYPES[t]['name']}" for t in selected_types])}
-
-## Quick Start
-
-1. Open this folder in Antigravity IDE
-2. Type: "Đọc nội dung .agent/GEMINI.md"
-3. Start building!
-
-## Available Commands
-
-{chr(10).join([f"- `/{w.replace('.md', '')}`" for w in merged['workflows']])}
-
----
-*Generated by VibeCoding*
-'''
-    readme_path = full_project_path / "README.md"
-    readme_path.write_text(readme_content, encoding="utf-8")
-
-    # Create .gitignore
-    print("\n  📄 Creating .gitignore...")
-    gitignore_content = '''# ===================================
-# VibeCoding Project .gitignore
-# ===================================
-
-# Dependencies
-node_modules/
-vendor/
-.pnpm-store/
-
-# Build outputs
-dist/
-build/
-out/
-.next/
-.nuxt/
-.output/
-
-# Environment files (NEVER commit these!)
-.env
-.env.local
-.env.*.local
-*.env
-
-# IDE & Editor
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS files
-.DS_Store
-Thumbs.db
-Desktop.ini
-
-# Logs
-logs/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Cache
-.cache/
-*.cache
-.parcel-cache/
-.eslintcache
-.stylelintcache
-
-# Testing
-coverage/
-.nyc_output/
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-venv/
-.venv/
-ENV/
-
-# Temporary files
-tmp/
-temp/
-*.tmp
-*.temp
-
-# ===================================
-# VibeCoding Agent Notes
-# ===================================
-# The .agent folder IS safe to commit!
-# It contains AI configuration, not secrets.
-#
-# DO NOT add .agent to gitignore unless you
-# specifically don't want to share AI config.
-# ===================================
-'''
-    gitignore_path = full_project_path / ".gitignore"
-    gitignore_path.write_text(gitignore_content, encoding="utf-8")
-    print_success(".gitignore")
-
-    # Track project in analytics
-    try:
-        from analytics import track_project
-        track_project({
-            "project_name": project_name,
-            "project_path": str(full_project_path),
-            "project_types": selected_types,
-            "tech_stack": tech_stack,
-            "environment": env_info
-        })
-        print_success("Analytics tracked")
-    except ImportError:
-        pass  # Analytics module not available
-
-    # Step 7: Show success
+    # Step 9: Show completion
     print("\n" + "=" * 60)
-    print("  ✅ HOÀN TẤT!")
+    print("  HOAN TAT!")
     print("=" * 60)
-    print(f"\n  📂 Dự án: {full_project_path}")
-    print(f"  📦 Kích thước: {format_size(total_bytes)}")
+    print(f"\n  Du an: {full_project_path}")
+    print(f"  Kich thuoc: {format_size(total_bytes)}")
 
-    # Calculate savings (assume full template is ~10MB)
     full_size = 10 * 1024 * 1024
     savings = max(0, 100 - (total_bytes / full_size * 100))
-    print(f"  💾 Tiết kiệm: ~{savings:.0f}% so với full template")
+    print(f"  Tiet kiem: ~{savings:.0f}% so voi full template")
 
-    print("\n  📌 Bước tiếp theo:")
-    print(f"     1. Mở folder '{full_project_path}' trong Antigravity")
-    print("     2. Gõ: \"Đọc nội dung .agent/GEMINI.md\"")
-    print("     3. Bắt đầu VibeCoding! 🎉")
-    print("     4. Xem dashboard: python new_project.py --stats")
+    print("\n  Buoc tiep theo:")
+    print(f"     1. Mo thu muc '{full_project_path}' trong {runtime_id}")
+    print(f"     2. Xem .ai-coding-starter/project.yaml")
+    print(f"     3. Bat dau VibeCoding!")
+    print(f"     4. Xem dashboard: python new_project.py --stats")
     print()
+
+
+def select_runtime():
+    """Select runtime adapter for the project.
+
+    Returns:
+        Runtime ID string (codex, opencode, antigravity, claude-code, cursor)
+        or "portable" for portable-only (no runtime-specific files).
+    """
+    runtimes = [
+        ("portable", "Portable / Shared instructions only", "Portable AGENTS.md only - no runtime-specific files"),
+        ("codex", "Codex CLI", "OpenAI Codex CLI - .codex/AGENTS.md"),
+        ("opencode", "OpenCode", "OpenCode - .opencode/OpenCode.md"),
+        ("antigravity", "Antigravity IDE", "Antigravity IDE - .agent/GEMINI.md"),
+        ("claude-code", "Claude Code", "Anthropic Claude Code - .claude/CLAUDE.md"),
+        ("cursor", "Cursor", "Cursor IDE - .cursor/AGENTS.md"),
+    ]
+
+    print("\n  SELECT RUNTIME ADAPTER")
+    print("-" * 60)
+    print("  Select how project instructions will be represented:")
+    print()
+    for i, (rid, name, desc) in enumerate(runtimes, 1):
+        print(f"    [{i}] {name}")
+        print(f"        {desc}")
+    print()
+
+    while True:
+        selection = get_input(f"Select runtime (1-{len(runtimes)})", "1")
+        try:
+            idx = int(selection.strip()) - 1
+            if 0 <= idx < len(runtimes):
+                return runtimes[idx][0]
+            print_error(f"Invalid selection! Choose 1-{len(runtimes)}")
+        except ValueError:
+            print_error("Invalid selection! Please enter a number.")
+
+
+def print_preview(project_name, project_type_id, selected_cap_ids,
+                  bundle_id, tech_stack, resource_selection, runtime_id,
+                  project_root):
+    """Show preview of what will be generated."""
+    print()
+    print("=" * 60)
+    print("  PREVIEW")
+    print("=" * 60)
+    print(f"  Project: {project_name}")
+    print(f"  Location: {project_root}")
+    print(f"  Type: {project_type_id}")
+    print(f"  Capabilities: {', '.join(selected_cap_ids) if selected_cap_ids else '(none)'}")
+    print(f"  Stack: {tech_stack.get('bundle_name', bundle_id)} ({bundle_id})")
+    print(f"  Runtime: {runtime_id}")
+    print()
+    print("  Resources to be created:")
+    for r in resource_selection.resources:
+        print(f"    - {r.type}:{r.id} ({r.selection_reason})")
+    print()
+
+
+def _build_merge_req_from_selection(resource_selection):
+    """Build merged_req dict from ResourceSelection for copy_selective.
+
+    Converts ResourceSelection objects (id, type) into the format expected
+    by copy_selective():
+      - agents: ["project-planner.md", ...]
+      - skills: ["modern-web-architect", ...]
+      - shared: ["design-system", ...]
+      - workflows: ["create.md", ...]
+      - scripts: ["auto_preview.py", ...]
+    """
+    merged = {
+        "agents": [],
+        "skills": [],
+        "shared": [],
+        "workflows": [],
+        "scripts": [],
+        "focus": []
+    }
+    for r in resource_selection.resources:
+        if r.type == "agent":
+            merged["agents"].append(f"{r.id}.md")
+        elif r.type == "skill":
+            merged["skills"].append(r.id)
+        elif r.type == "shared-module":
+            merged["shared"].append(r.id)
+        elif r.type == "workflow":
+            merged["workflows"].append(f"{r.id}.md")
+        elif r.type == "script":
+            if r.id.endswith(".py"):
+                merged["scripts"].append(r.id)
+            else:
+                merged["scripts"].append(f"{r.id}.py")
+        elif r.type == "template":
+            merged["scripts"].append(f"{r.id}.yaml")
+        elif r.type == "rule":
+            merged["scripts"].append(f"{r.id}.md")
+    for key in ["agents", "skills", "shared", "workflows", "scripts"]:
+        merged[key] = sorted(merged[key])
+    return merged
+
 
 if __name__ == "__main__":
     # Check for --stats flag

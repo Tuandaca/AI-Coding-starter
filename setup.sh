@@ -48,7 +48,7 @@ echo "   CREATING SHORTCUTS"
 echo "============================================"
 cat > "$SCRIPT_DIR/NewPJ.sh" << SHORTCUT
 #!/bin/bash
-cd "$(dirname "$0")"
+cd "\$(dirname \"\$0\")"
 "$PYTHON_CMD" new_project.py
 SHORTCUT
 chmod +x "$SCRIPT_DIR/NewPJ.sh"
