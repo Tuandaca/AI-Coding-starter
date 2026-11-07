@@ -135,7 +135,13 @@ class TestSetupHelperJsonEscaping(unittest.TestCase):
             result = _run_helper(str(projects_dir))
             self.assertEqual(result.returncode, 0, result.stderr)
             config = _parse_config(CONFIG_FILE)
-            self.assertEqual(config["DEFAULT_PROJECT_PATH"], str(projects_dir))
+            # Production code calls .resolve() on the config path, so compare
+            # resolved canonical paths to be stable on Windows CI where
+            # tempfile.TemporaryDirectory() may yield 8.3 short-path aliases.
+            self.assertEqual(
+                Path(config["DEFAULT_PROJECT_PATH"]).resolve(),
+                projects_dir.resolve(),
+            )
 
     def test_posix_path_with_spaces_round_trips(self):
         """POSIX paths with spaces round-trip through JSON."""
@@ -144,7 +150,10 @@ class TestSetupHelperJsonEscaping(unittest.TestCase):
             result = _run_helper(str(projects_dir))
             self.assertEqual(result.returncode, 0, result.stderr)
             config = _parse_config(CONFIG_FILE)
-            self.assertEqual(config["DEFAULT_PROJECT_PATH"], str(projects_dir))
+            self.assertEqual(
+                Path(config["DEFAULT_PROJECT_PATH"]).resolve(),
+                projects_dir.resolve(),
+            )
 
     def test_unicode_path_round_trips(self):
         """Unicode paths are preserved through JSON (UTF-8)."""
@@ -153,7 +162,10 @@ class TestSetupHelperJsonEscaping(unittest.TestCase):
             result = _run_helper(str(projects_dir))
             self.assertEqual(result.returncode, 0, result.stderr)
             config = _parse_config(CONFIG_FILE)
-            self.assertEqual(config["DEFAULT_PROJECT_PATH"], str(projects_dir))
+            self.assertEqual(
+                Path(config["DEFAULT_PROJECT_PATH"]).resolve(),
+                projects_dir.resolve(),
+            )
 
     def test_config_has_no_machine_specific_path_when_committed(self):
         """The committed config.json must not contain a machine-specific
