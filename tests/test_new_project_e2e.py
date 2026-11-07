@@ -203,16 +203,17 @@ class TestNewProjectE2E(unittest.TestCase):
         self.assertTrue((project_root / ".ai-coding-starter" / "project.yaml").is_file())
 
     def test_e2e_lock_matches_copied_resources(self):
-        """Every locked resource corresponds to a resource actually copied into the project."""
+        """Every locked BUNDLED agent corresponds to a resource actually copied into the project.
+        Agency agents are knowledge-base references (provenance in lock), not copied files."""
         project_root, _ = _run_wizard("lock-project", "saas", confirm="y")
         lock = new_project.read_resources_lock(
             project_root / ".ai-coding-starter" / "resources.lock")
         # Agents are copied as <id>.md under agents/.
         agents_dir = project_root / "agents"
         for res in lock.resources:
-            if res.type == "agent":
+            if res.type == "agent" and res.provenance.source == "bundled":
                 self.assertTrue((agents_dir / f"{res.id}.md").is_file(),
-                                f"Locked agent {res.id} was not copied into the project")
+                                f"Locked bundled agent {res.id} was not copied into the project")
 
     def test_e2e_no_network_access(self):
         """Generation works with bundled resources only (no external template required)."""
