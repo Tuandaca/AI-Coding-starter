@@ -1,6 +1,6 @@
 # 🚀 AI Coding Starter
 
-> **V2.0.1** — A portable, runtime-agnostic project bootstrapper for AI-assisted coding.
+> **V2.1.0** — A portable, runtime-agnostic project bootstrapper for AI-assisted coding.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -37,21 +37,46 @@ Canceling at confirmation writes **zero** project files.
 
 ## Quick start
 
-```bash
-# Clone or extract this repository
-git clone https://github.com/Tuandaca/AI-Coding-starter.git
-cd AI-Coding-starter
+### Option A: Download release ZIP (no Git required)
 
-# One-time setup (Windows or macOS/Linux)
-#   Windows: setup.bat
-#   macOS/Linux: ./setup.sh
-./setup.sh
+Recommended for end users.
 
-# Create a project
-python new_project.py
+1. Go to **Releases** on GitHub: https://github.com/Tuandaca/AI-Coding-starter/releases
+2. Download the latest `AI-Coding-Starter-v2.1.0.zip`.
+3. Extract the ZIP to a folder.
+
+**Windows:**
+```bat
+setup.bat
+NewPJ.bat
 ```
 
-`setup.bat` / `setup.sh` detect Python, validate the bundled resources, and write `config.json` (no machine-specific absolute paths, no `sed` source mutation, no external template clone). They create a platform launcher (`NewPJ.bat` / `NewPJ.sh`) that runs `new_project.py` from the starter directory.
+**macOS / Linux:**
+```bash
+chmod +x setup.sh
+./setup.sh
+./NewPJ.sh
+```
+
+`setup.bat` / `setup.sh` detects Python, validates bundled resources, and writes `config.json` (no machine-specific absolute paths, no `sed` source mutation, no external template clone). They create a platform launcher (`NewPJ.bat` / `NewPJ.sh`) that runs `new_project.py` from the starter directory.
+
+**Git clone alternative (developer flow):**
+
+```bash
+git clone https://github.com/Tuandaca/AI-Coding-starter.git
+cd AI-Coding-starter
+./setup.sh      # macOS/Linux
+./NewPJ.sh
+# or on Windows:
+setup.bat
+NewPJ.bat
+```
+
+Then run the wizard:
+
+```bash
+python new_project.py
+```
 
 ---
 
@@ -83,7 +108,7 @@ Example resolved teams (small, bounded):
 - **Fullstack**: frontend + backend + database + QA + architecture
 - **AI/RAG**: AI engineer, backend, RAG tooling (mcp-builder), vector search
 
-A normal project receives a small team — never 20+ agents.
+A normal project receives a small specialist team — never more than 10 agents (default hard ceiling).
 
 ---
 
@@ -112,6 +137,8 @@ Existing V1 projects (`.agent/`, `GEMINI.md`, `CONTEXT.md`) are enhanced, never 
 ## Optional intelligence integrations
 
 Codebase Memory, Agent-Reach, and Orca are **optional and fail-optional** — they are never dependencies of project creation or portable state. Agency Agents (msitarzewski/agency-agents, MIT) is imported as the canonical specialist knowledge base at `catalog/agency-agents.yaml` (268 agents across 18 divisions, pinned commit `b859c515d813efcfc4755d3471dd9e7686c7706d`). It is **not a runtime dependency**: end-user project generation remains offline and activates only a small bounded team selected by the deterministic resolver.
+
+**IMPORT ALL != ACTIVATE ALL:** The full Agency catalog is available to the resolver as a knowledge base, but only the relevant specialists for your project type and capabilities are activated. A typical project gets a small team (default hard ceiling of 10 agents) — never the entire catalog.
 
 No permission-bypass flags (`--yolo`, `--dangerously-skip-permissions`, `--dangerously-bypass-approvals-and-sandbox`) are ever used.
 
