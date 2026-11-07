@@ -115,12 +115,12 @@ class TestPathPortability(unittest.TestCase):
         root = new_project.BUNDLED_RESOURCE_ROOT
         self.assertTrue(root.is_absolute())
         self.assertEqual(root.name, "resources")
-        # Repository-relative: computed from __file__, never a hard-coded
-        # drive-letter absolute path such as D:\VibeCoding-Template\.agent.
-        self.assertFalse(
-            str(root).startswith(("D:", "C:")),
-            f"BUNDLED_RESOURCE_ROOT is drive-letter dependent: {root}",
-        )
+        # Repository-relative: computed from __file__ (the repo location),
+        # never a hard-coded drive-letter absolute path such as
+        # D:\VibeCoding-Template\.agent. Works regardless of the directory
+        # name the repository is cloned into.
+        self.assertEqual(root.parent, Path(new_project.__file__).parent)
+        self.assertNotIn("VibeCoding-Template", str(root))
 
     def test_no_hardcoded_d_drive_paths(self):
         """new_project.py must not contain D:\ hard-coded paths."""
