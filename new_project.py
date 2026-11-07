@@ -1789,12 +1789,11 @@ def main():
     project_path = get_input("Duong dan du an", str(DEFAULT_PROJECT_PATH))
     project_path = Path(project_path)
 
-    # Ensure project path exists
-    project_path.mkdir(parents=True, exist_ok=True)
-
     full_project_path = project_path / project_name
 
-    # Check if already exists - reject if non-empty directory
+    # Check if already exists - reject if non-empty directory.
+    # NOTE: we deliberately do NOT create project_path here (CF-1):
+    # nothing is written to disk before explicit user confirmation.
     if full_project_path.exists() and any(full_project_path.iterdir()):
         print_error(f"Thu muc '{full_project_path}' da ton tai va khong trong!")
         print_info("Vui long chon ten du an khac hoac thu muc khac.")
@@ -1813,13 +1812,15 @@ def main():
     project_type_display = catalog.project_types[project_type_id].name
     tech_stack = bundle_to_tech_stack(bundle, project_type_display)
 
-    # Step 3b (M7): Resolve resources using declarative adapter model
+    # Step 3b (M7): Resolve resources using declarative adapter model.
+    # CF-5: the same effective resource root (bundled or external fallback)
+    # is used by both the resolver and the copier so authority is consistent.
     resource_selection = resolve_resources(
         project_type_id,
         selected_cap_ids,
         bundle_id,
         catalog_dir=DEFAULT_CATALOG_DIR,
-        resources_root=BUNDLED_RESOURCE_ROOT,
+        resources_root=resource_root,
     )
     if not resource_selection.ok:
         for err in resource_selection.errors:
@@ -1878,57 +1879,131 @@ def main():
         sys.exit(0)
 
     # Step 8: WRITE EVERYTHING (after confirmation only)
+    # Transactional strategy (CF-2): build into a staging directory, then
+    # atomically finalize into the target. On any failure, staging is removed
+    # and the target / user files are never touched.
 
-    # Create project folder
-    full_project_path.mkdir(parents=True, exist_ok=True)
+    # Create parent directory now that the user has confirmed (CF-1: nothing
+    # is created before confirmation).
+    project_path.mkdir(parents=True, exist_ok=True)
 
-    # Write canonical state files
-    write_project_spec(full_project_path, spec)
-    write_state(full_project_path, state)
-    write_resources_lock(full_project_path, lock)
+    staging = project_path / f".staging-{project_name}-{os.getpid()}"
+    staging.mkdir(parents=True, exist_ok=True)
+    staging_proj = staging / project_name
 
-    # Copy resources using resource selection
-    merged_req = _build_merge_req_from_selection(resource_selection)
-    total_bytes = copy_selective(
-        resource_root,
-        full_project_path,
-        merged_req,
-        project_name,
-        [],
-        tech_stack,
-        env_info
-    )
+    runtime_ok = True
+    runtime_errors: list[str] = []
+    total_bytes = 0
 
-    # Render derived Markdown files
-    render_all(full_project_path, spec, state)
+    try:
+        # Create project folder inside staging
+        staging_proj.mkdir(parents=True, exist_ok=True)
 
-    # Install runtime adapter
-    if runtime_id != "portable":
-        renderer = GenericRenderer(full_project_path)
-        render_result = renderer.install(runtime_id)
-        if not render_result.ok:
-            for err in render_result.errors:
-                print_error(err)
+        # Write canonical state files
+        write_project_spec(staging_proj, spec)
+        write_state(staging_proj, state)
+        write_resources_lock(staging_proj, lock)
+
+        # Copy resources using resource selection
+        merged_req = _build_merge_req_from_selection(resource_selection)
+        total_bytes = copy_selective(
+            resource_root,
+            staging_proj,
+            merged_req,
+            project_name,
+            [],
+            tech_stack,
+            env_info
+        )
+
+        # Render derived Markdown files
+        render_all(staging_proj, spec, state)
+
+        # Install runtime adapter (into staging)
+        if runtime_id != "portable":
+            renderer = GenericRenderer(
+                staging_proj, adapters_dir=str(STARTER_PATH / "runtime-adapters")
+            )
+            render_result = renderer.install(runtime_id)
+            if not render_result.ok:
+                runtime_ok = False
+                runtime_errors = list(render_result.errors)
+                for err in render_result.errors:
+                    print_error(err)
+            else:
+                print_success(f"Runtime adapter '{runtime_id}' installed")
+
+    except Exception as exc:
+        # Rollback: remove staging, never touch the target or user files.
+        shutil.rmtree(staging, ignore_errors=True)
+        print_error(f"Loi tao du an: {exc}")
+        print_info("Da hoan tat bo dau; khong file nao duoc ghi vao muc tieu.")
+        sys.exit(1)
+
+    # Commit staging into target (atomic rename where possible; copy fallback).
+    try:
+        if full_project_path.exists():
+            # Target exists (must be empty per pre-confirmation check); merge.
+            _merge_dir_contents(staging_proj, full_project_path)
         else:
-            print_success(f"Runtime adapter '{runtime_id}' installed")
+            os.replace(staging_proj, full_project_path)
+    except OSError:
+        # Cross-device rename fallback: copy then remove staging.
+        try:
+            if full_project_path.exists():
+                _merge_dir_contents(staging_proj, full_project_path)
+            else:
+                shutil.copytree(staging_proj, full_project_path)
+        except OSError:
+            shutil.rmtree(staging, ignore_errors=True)
+            raise
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
 
-    # Step 9: Show completion
+    # Step 9: Show completion with honest status (CF-4).
     print("\n" + "=" * 60)
-    print("  HOAN TAT!")
+    if runtime_id != "portable" and not runtime_ok:
+        print("  HOAN TAT (PHAN LOI CAI DAT RUNTIME)")
+    else:
+        print("  HOAN TAT!")
     print("=" * 60)
     print(f"\n  Du an: {full_project_path}")
     print(f"  Kich thuoc: {format_size(total_bytes)}")
 
-    full_size = 10 * 1024 * 1024
-    savings = max(0, 100 - (total_bytes / full_size * 100))
-    print(f"  Tiet kiem: ~{savings:.0f}% so voi full template")
+    if runtime_id != "portable" and not runtime_ok:
+        print("\n  Trang thai: PARTIAL_SUCCESS")
+        print("  Trang thai can duoc cap nhat va chay lai de cai dat runtime adapter.")
+        if runtime_errors:
+            print(f"  Loi cai dat runtime: {'; '.join(runtime_errors)}")
+        print("\n  Buoc tiep theo:")
+        print(f"     1. Mo thu muc '{full_project_path}' trong {runtime_id}")
+        print(f"     2. Xem .ai-coding-starter/project.yaml")
+        print(f"     3. Bat dau VibeCoding!")
+        print(f"     4. Cai dat runtime adapter sau (chay lai new_project.py va chon runtime).")
+        print()
+    else:
+        full_size = 10 * 1024 * 1024
+        savings = max(0, 100 - (total_bytes / full_size * 100))
+        print(f"  Tiet kiem: ~{savings:.0f}% so voi full template")
 
-    print("\n  Buoc tiep theo:")
-    print(f"     1. Mo thu muc '{full_project_path}' trong {runtime_id}")
-    print(f"     2. Xem .ai-coding-starter/project.yaml")
-    print(f"     3. Bat dau VibeCoding!")
-    print(f"     4. Xem dashboard: python new_project.py --stats")
-    print()
+        print("\n  Buoc tiep theo:")
+        print(f"     1. Mo thu muc '{full_project_path}' trong {runtime_id}")
+        print(f"     2. Xem .ai-coding-starter/project.yaml")
+        print(f"     3. Bat dau VibeCoding!")
+        print(f"     4. Xem dashboard: python new_project.py --stats")
+        print()
+
+
+def _merge_dir_contents(src: Path, dst: Path) -> None:
+    """Copy all contents of ``src`` into existing directory ``dst``."""
+    src = Path(src)
+    dst = Path(dst)
+    for item in src.iterdir():
+        target = dst / item.name
+        if item.is_dir():
+            shutil.copytree(item, target, dirs_exist_ok=True)
+        else:
+            shutil.copy2(item, target)
 
 
 def select_runtime():

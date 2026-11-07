@@ -184,8 +184,10 @@ class GenericRenderer:
 
         candidates = []
         if self.adapters_dir:
+            # Resolve adapters from the trusted installation root
+            # (adapters_dir), never from the current working directory.
+            # CF-3: runtime adapter lookup must not depend on CWD.
             candidates.append(self.project_root / self.adapters_dir / f"{runtime_id}.yaml")
-            candidates.append(Path.cwd() / self.adapters_dir / f"{runtime_id}.yaml")
         candidates.append(self.project_root / f"{runtime_id}.yaml")
 
         for path in candidates:

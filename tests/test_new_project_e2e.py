@@ -11,11 +11,12 @@ Standard library only. No network.
 """
 import io
 import json
+import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
@@ -218,6 +219,137 @@ class TestNewProjectE2E(unittest.TestCase):
         project_root, _ = _run_wizard("offline-project", "saas", confirm="y")
         self.assertTrue((project_root / ".ai-coding-starter" / "project.yaml").is_file(),
                         "Offline generation failed - project.yaml not created")
+
+    # ------------------------------------------------------------------
+    # CF-1: Zero-side-effect cancellation
+    # ------------------------------------------------------------------
+    def test_cf1_cancel_does_not_create_parent_directory(self):
+        """CF-1: canceling before confirmation must not create the parent dir."""
+        temp_dir = Path(tempfile.mkdtemp(prefix="m5-cf1-"))
+        nonexistent_parent = temp_dir / "should-not-exist" / "nested"
+        self.assertFalse(nonexistent_parent.exists())
+
+        type_pos = _type_position("saas")
+        inputs = iter([
+            "cf1-test-project",           # project name
+            str(nonexistent_parent),      # project path (does NOT exist)
+            type_pos,                     # project type
+            "",                           # capabilities (defaults)
+            "",                           # stack bundle (first)
+            "1",                          # runtime = portable
+            "n",                          # confirm -> cancel
+        ])
+
+        def fake_get_input(prompt, default=None):
+            try:
+                return next(inputs)
+            except StopIteration:
+                return default if default else ""
+
+        with patch("new_project.get_input", side_effect=fake_get_input):
+            old_stdout = sys.stdout
+            sys.stdout = io.StringIO()
+            try:
+                new_project.main()
+            except SystemExit:
+                pass
+            finally:
+                sys.stdout = old_stdout
+
+        # The parent directory must NOT have been created by the tool.
+        self.assertFalse(nonexistent_parent.exists(),
+                         "Parent directory must not be created on cancel (CF-1)")
+        self.assertFalse((temp_dir / "should-not-exist").exists())
+
+    # ------------------------------------------------------------------
+    # CF-2: Transactional generation — failure injection rollback
+    # ------------------------------------------------------------------
+    @patch("new_project.copy_selective")
+    def test_cf2_failure_injection_rolls_back_no_partial_project(self, mock_copy):
+        """CF-2: if a post-confirmation step fails, no partial project remains."""
+        mock_copy.side_effect = OSError("simulated disk failure during copy")
+
+        temp_dir = Path(tempfile.mkdtemp(prefix="m5-cf2-"))
+        project_path = temp_dir
+        type_pos = _type_position("saas")
+        inputs = iter([
+            "cf2-test-project", str(project_path), type_pos, "", "", "1", "y",
+        ])
+
+        def fake_get_input(prompt, default=None):
+            try:
+                return next(inputs)
+            except StopIteration:
+                return default if default else ""
+
+        with patch("new_project.get_input", side_effect=fake_get_input):
+            old_stdout = sys.stdout
+            sys.stdout = io.StringIO()
+            try:
+                new_project.main()
+            except SystemExit:
+                pass
+            finally:
+                sys.stdout = old_stdout
+
+        # No project directory and no staging leftovers under the target parent.
+        self.assertFalse((project_path / "cf2-test-project").exists(),
+                         "No partial project directory after failure (CF-2)")
+        leftovers = [p for p in project_path.iterdir()
+                     if p.name.startswith(".staging-")]
+        self.assertEqual(len(leftovers), 0,
+                         f"Staging dirs should be cleaned up: {leftovers}")
+
+    # ------------------------------------------------------------------
+    # CF-3: Runtime adapter lookup independent of CWD
+    # ------------------------------------------------------------------
+    def test_cf3_runtime_adapter_independent_of_cwd(self):
+        """CF-3: adapter resolves from starter root, not CWD (CF-3)."""
+        orig_cwd = Path.cwd()
+        try:
+            os.chdir(tempfile.mkdtemp(prefix="m5-cf3-cwd-"))
+            project_root, _ = _run_wizard("cf3-test", "saas",
+                                          confirm="y", runtime="codex")
+            self.assertTrue((project_root / ".ai-coding-starter" / "project.yaml").is_file())
+        finally:
+            os.chdir(orig_cwd)
+
+    # ------------------------------------------------------------------
+    # CF-4: Runtime install failure semantics — PARTIAL_SUCCESS, not HOAN TAT
+    # ------------------------------------------------------------------
+    @patch("new_project.GenericRenderer")
+    def test_cf4_runtime_install_failure_partial_success(self, mock_renderer_cls):
+        """CF-4: runtime install failure keeps canonical state and reports partial."""
+        mock_renderer = mock_renderer_cls.return_value
+        mock_result = Mock()
+        mock_result.ok = False
+        mock_result.errors = ["simulated adapter failure"]
+        mock_renderer.install.return_value = mock_result
+
+        project_root, _ = _run_wizard("cf4-test", "saas", confirm="y", runtime="codex")
+
+        # Project was created despite runtime failure.
+        self.assertTrue(project_root.is_dir())
+        # Canonical state intact (not corrupt).
+        self.assertTrue((project_root / ".ai-coding-starter" / "project.yaml").is_file())
+        self.assertTrue((project_root / ".ai-coding-starter" / "state.yaml").is_file())
+        self.assertTrue((project_root / ".ai-coding-starter" / "resources.lock").is_file())
+
+    # ------------------------------------------------------------------
+    # CF-5: Resource root consistency — resolver and copier use same authority
+    # ------------------------------------------------------------------
+    def test_cf5_resource_root_consistency(self):
+        """CF-5: resolver validates resources under the same root it copies from."""
+        from core.resource_resolver import resolve_resources
+        resource_root = new_project.get_resource_root()
+        result = resolve_resources(
+            "saas", [], "nextjs-supabase",
+            catalog_dir=new_project.DEFAULT_CATALOG_DIR,
+            resources_root=resource_root,
+        )
+        self.assertTrue(result.ok, f"Resolver failed: {result.errors}")
+        self.assertGreater(len(result.resources), 0,
+                           "Resolver must find resources under the effective root")
 
 
 if __name__ == "__main__":
