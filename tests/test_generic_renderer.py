@@ -103,7 +103,13 @@ class TestGenericRendererRendering(unittest.TestCase):
         self.assertTrue(result.ok, msg=result.errors)
         owned = self.root / ".agent/GEMINI.md"
         self.assertTrue(owned.exists())
-        self.assertIn(owned, result.written)
+        # _safe_output_path() resolves paths; compare canonical resolved paths
+        # so the test is stable on Windows CI where tempdirs may use 8.3
+        # short-path aliases (RUNNER~1 vs runneradmin).
+        self.assertIn(
+            owned.resolve(),
+            [path.resolve() for path in result.written],
+        )
         content = owned.read_text(encoding="utf-8")
         self.assertIn("My Project", content)
         self.assertIn(str(self.spec.id), content)

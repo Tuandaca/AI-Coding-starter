@@ -74,7 +74,13 @@ class TestInstallUninstallReversibility(unittest.TestCase):
         self.assertTrue(result.ok, msg=result.errors)
         owned = self.root / ".agent/GEMINI.md"
         self.assertTrue(owned.exists())
-        self.assertIn(owned, result.written)
+        # _safe_output_path() resolves paths; compare canonical resolved paths
+        # so the test is stable on Windows CI where tempdirs may use 8.3
+        # short-path aliases (RUNNER~1 vs runneradmin).
+        self.assertIn(
+            owned.resolve(),
+            [path.resolve() for path in result.written],
+        )
 
     def test_antigravity_uninstall_removes_only_owned_file(self):
         self.renderer.install("antigravity")
@@ -83,7 +89,10 @@ class TestInstallUninstallReversibility(unittest.TestCase):
 
         result = self.renderer.uninstall("antigravity")
         self.assertTrue(result.ok, msg=result.errors)
-        self.assertIn(owned, result.removed)
+        self.assertIn(
+            owned.resolve(),
+            [path.resolve() for path in result.removed],
+        )
         self.assertFalse(owned.exists())
 
     def test_uninstall_preserves_canonical_files(self):
