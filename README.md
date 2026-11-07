@@ -111,7 +111,7 @@ Existing V1 projects (`.agent/`, `GEMINI.md`, `CONTEXT.md`) are enhanced, never 
 
 ## Optional intelligence integrations
 
-Codebase Memory, Agent-Reach, and Orca are **optional and fail-optional** — they are never dependencies of project creation or portable state. Agency Agents concepts (specialist roles, skills, rules, runbooks/quality gates) informed the small bounded specialist set, but Agency Agents is not imported wholesale and is not a runtime dependency.
+Codebase Memory, Agent-Reach, and Orca are **optional and fail-optional** — they are never dependencies of project creation or portable state. Agency Agents (msitarzewski/agency-agents, MIT) is imported as the canonical specialist knowledge base at `catalog/agency-agents.yaml` (268 agents across 18 divisions, pinned commit `b859c515d813efcfc4755d3471dd9e7686c7706d`). It is **not a runtime dependency**: end-user project generation remains offline and activates only a small bounded team selected by the deterministic resolver.
 
 No permission-bypass flags (`--yolo`, `--dangerously-skip-permissions`, `--dangerously-bypass-approvals-and-sandbox`) are ever used.
 
@@ -120,7 +120,7 @@ No permission-bypass flags (`--yolo`, `--dangerously-skip-permissions`, `--dange
 ## Attribution & third-party notices
 
 - **AI-Coding-starter bundled resources**: locally authored, MIT (see `catalog/upstream-sources.yaml`, source `ai-coding-starter-bundled`).
-- **Agency Agents** (msitarzewski/agency-agents): MIT — architectural inspiration for specialist roles, skills, rules and runbooks; not imported into generated projects.
+- **Agency Agents** (msitarzewski/agency-agents): MIT — imported as the canonical specialist knowledge base at `catalog/agency-agents.yaml` (268 agents, 18 divisions, pinned commit `b859c515d813efcfc4755d3471dd9e7686c7706d`). Full provenance in `catalog/upstream-sources.yaml` and `THIRD_PARTY_NOTICES.md`.
 - **Agent-Reach**, **Orca**, **Codebase Memory MCP**: MIT — optional external integrations only.
 - **OpenMontage**: AGPL-3.0 — architectural inspiration only (declarative manifests, approval gates); no source copied.
 
