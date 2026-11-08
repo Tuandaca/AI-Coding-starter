@@ -732,10 +732,12 @@ Each milestone defines objective, why, dependencies, files expected to change, f
 
 ## 36. Release roadmap
 
-- **V2.0 Core**: M0, M1, M2, M3, M4, M5, M7, M8, M12.
+- **V2.0 Core** (implemented, V2.1.1): M0, M1, M2, M3, M4, M5, M7, M8, M12.
   Establishes tool-agnostic architecture, self-contained starter, catalogs, resolver, portable state, adapter framework, handoff protocol, safe migration path. Zero LLM dependency; zero mandatory external integration.
-- **V2.1 (Optional Intelligence & Orchestration)**: M6 (specialist catalog + team packs), M9 (Codebase Memory), M10 (Agent-Reach), M11 (Orca/git-worktree).
-  Staged after V2.0 to reduce risk; each optional and fail-open.
+  The Agency Agents specialist catalog (268 agents) is imported and the resolver activates only a small, scored, evidence-backed team per project — never the full catalog.
+- **V2.1 (Optional Intelligence & Orchestration)** — NOT IMPLEMENTED, planned only:
+  M9 (Codebase Memory), M10 (Agent-Reach), M11 (Orca/git-worktree), plus the optional LLM Advisor / Explanation Layer.
+  Each is optional and fail-open; none is a dependency of project creation or portable state. They are NOT described as completed functionality anywhere in this repository.
 
 Runtime independence (M5) is in V2.0 Core — not deferred — because it is a core product requirement.
 

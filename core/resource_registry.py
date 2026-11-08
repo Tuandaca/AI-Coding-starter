@@ -271,14 +271,14 @@ def build_default_registry(
 ) -> ResourceRegistry:
     """Build the default registry (bundled + agency catalog)."""
     if resources_root is None:
-        resources_root = Path(__file__).resolve().parent.parent.parent / "resources"
+        resources_root = Path(__file__).resolve().parent.parent / "resources"
     if agency_catalog_path is None:
         agency_catalog_path = (
-            Path(__file__).resolve().parent.parent.parent / "catalog" / "agency-agents.yaml"
+            Path(__file__).resolve().parent.parent / "catalog" / "agency-agents.yaml"
         )
     if enrichment_catalog_path is None:
         enrichment_catalog_path = (
-            Path(__file__).resolve().parent.parent.parent / "catalog" / "agency-enrichment.yaml"
+            Path(__file__).resolve().parent.parent / "catalog" / "agency-enrichment.yaml"
         )
     loader = ResourceCatalogLoader(resources_root, agency_catalog_path, enrichment_catalog_path)
     return loader.load()

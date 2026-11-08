@@ -228,23 +228,6 @@
       ]
     },
     {
-      "project_type": "game-dev",
-      "resources": [
-        {"id": "project-planner", "type": "agent", "reason": "project-type:game-dev", "when": {"always": true}},
-        {"id": "game-developer", "type": "agent", "reason": "project-type:game-dev", "when": {"always": true}},
-        {"id": "performance-optimizer", "type": "agent", "reason": "project-type:game-dev", "when": {"always": true}},
-        {"id": "security-auditor", "type": "agent", "reason": "capability:authentication", "when": {"capabilities_any": ["authentication", "authorization"]}},
-        {"id": "security-auditor", "type": "skill", "reason": "capability:authentication", "when": {"capabilities_any": ["authentication", "authorization"]}},
-        {"id": "game-development", "type": "skill", "reason": "project-type:game-dev", "when": {"always": true}},
-        {"id": "design-system", "type": "shared-module", "reason": "project-type:game-dev", "when": {"always": true}},
-        {"id": "design-philosophy", "type": "shared-module", "reason": "project-type:game-dev", "when": {"always": true}},
-        {"id": "create", "type": "workflow", "reason": "project-type:game-dev", "when": {"always": true}},
-        {"id": "deploy", "type": "workflow", "reason": "project-type:game-dev", "when": {"always": true}},
-        {"id": "auto_preview", "type": "script", "reason": "project-type:game-dev", "when": {"always": true}},
-        {"id": "checklist", "type": "script", "reason": "project-type:game-dev", "when": {"always": true}}
-      ]
-    },
-    {
       "project_type": "landing-page",
       "resources": [
         {"id": "project-planner", "type": "agent", "reason": "project-type:landing-page", "when": {"always": true}},

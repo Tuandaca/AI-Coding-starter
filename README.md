@@ -132,6 +132,20 @@ Example resolved teams (small, bounded):
 
 A normal project receives a small specialist team — never more than 10 agents (default hard ceiling).
 
+### Stack scaffold support (honest status)
+
+Not every stack bundle ships a runnable application scaffold. The generated
+project's README states the exact support level for its bundle:
+
+| Bundle | Scaffold support | Meaning |
+|---|---|---|
+| `react-static` | FULL | Functional React + TypeScript + Vite + TailwindCSS source scaffolded from offline templates. |
+| all other bundles | METADATA-ONLY | Canonical state + portable resources only; no application source code was created. |
+
+A metadata-only bundle may still be generated as AI-Coding-starter state, but
+the user is told explicitly that application source code was **not** scaffolded.
+No bundle pretends to be more than it is.
+
 ---
 
 ## Portable state

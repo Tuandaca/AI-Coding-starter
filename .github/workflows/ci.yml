@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [master, feat/v2.1-agency-integration]
+    branches: [master, feat/final-resource-hardening, feat/v2.1-agency-integration]
   pull_request:
-    branches: [master]
+    branches: [master, feat/final-resource-hardening]
 
 jobs:
   test:
@@ -24,7 +24,14 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Run test suite
-        run: |
-          python3 -m unittest discover -s tests -t .
-        shell: bash
+      - name: Display Python version
+        run: python --version
+
+      - name: Run compileall (stdlib byte-compile, offline)
+        run: python -m compileall -q core tests scripts new_project.py analytics.py migrate_project.py
+
+      - name: Run full unittest suite (offline, stdlib only)
+        run: python -m unittest discover -s tests -t .
+
+      - name: Repository consistency and security checks
+        run: python scripts/ci_consistency_check.py

@@ -1,9 +1,9 @@
 {
   "schema_version": "1.0.0",
   "source": "ai-coding-starter-maintained",
+  "imported_date": "2026-11-08",
   "license": "MIT",
-  "imported_date": "2026-11-07",
-  "description": "Maintainer-controlled specialization overlay for Agency agents. Derived canonical metadata used for specialty-aware resolver scoring. Does NOT modify the upstream agency-agents.yaml body content.",
+  "description": "Maintainer-controlled specialization overlay for Agency agents. Derived canonical metadata used for specialty-aware resolver scoring. Does NOT modify the upstream agency-agents.yaml body content. Every record id MUST match a real agent id in catalog/agency-agents.yaml; unmatched entries are ignored by the loader.",
   "agents": [
     {
       "id": "design-ui-designer",
@@ -51,31 +51,49 @@
       "task_tags": ["frontend", "development"]
     },
     {
-      "id": "project-planner",
-      "project_types": ["portfolio", "saas", "fullstack-application", "business-website"],
+      "id": "engineering-backend-architect",
+      "project_types": ["saas", "backend-api", "fullstack-application", "e-commerce"],
       "capabilities": [],
-      "tags": ["planning", "orchestration"],
-      "specialties": ["project-planning"],
-      "stack_tags": [],
-      "task_tags": ["planning"]
+      "tags": ["backend", "architecture", "api"],
+      "specialties": ["backend-architecture"],
+      "stack_tags": ["fastapi", "aspnet-core", "nestjs", "postgresql"],
+      "task_tags": ["backend", "architecture"]
     },
     {
-      "id": "orchestrator",
-      "project_types": ["portfolio", "saas", "fullstack-application"],
-      "capabilities": [],
-      "tags": ["orchestration", "coordination"],
-      "specialties": ["orchestration"],
+      "id": "security-appsec-engineer",
+      "project_types": ["saas", "e-commerce", "backend-api", "fullstack-application"],
+      "capabilities": ["authentication", "authorization"],
+      "tags": ["security", "appsec"],
+      "specialties": ["application-security"],
       "stack_tags": [],
-      "task_tags": ["orchestration"]
+      "task_tags": ["security", "audit"]
     },
     {
-      "id": "seo-specialist",
-      "project_types": ["portfolio", "landing-page", "business-website", "blog-content"],
+      "id": "engineering-rag-pipeline-engineer",
+      "project_types": ["ai-rag", "ai-agent"],
+      "capabilities": ["ai", "rag"],
+      "tags": ["rag", "pipeline", "retrieval"],
+      "specialties": ["rag-pipeline"],
+      "stack_tags": ["fastapi", "postgresql", "pgvector", "redis"],
+      "task_tags": ["ingest", "index", "retrieve"]
+    },
+    {
+      "id": "engineering-ai-engineer",
+      "project_types": ["ai-rag", "ai-agent"],
+      "capabilities": ["ai"],
+      "tags": ["ai", "llm", "agents"],
+      "specialties": ["ai-engineering"],
+      "stack_tags": ["fastapi"],
+      "task_tags": ["ai", "generation"]
+    },
+    {
+      "id": "engineering-search-relevance-engineer",
+      "project_types": ["ai-rag"],
       "capabilities": ["search"],
-      "tags": ["seo", "search"],
-      "specialties": ["search-engine-optimization"],
-      "stack_tags": [],
-      "task_tags": ["seo"]
+      "tags": ["search", "relevance"],
+      "specialties": ["search-relevance"],
+      "stack_tags": ["pgvector", "elasticsearch"],
+      "task_tags": ["search", "ranking"]
     }
   ]
 }

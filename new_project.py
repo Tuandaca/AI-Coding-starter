@@ -2008,6 +2008,11 @@ def main():
         print(cli_ui.success("HOAN TAT!"))
     print(cli_ui.metadata("Du an", str(full_project_path)))
     print(cli_ui.metadata("Kich thuoc", format_size(total_bytes)))
+    from core.stack_scaffold import scaffold_support_for
+    support = scaffold_support_for(bundle_id)
+    support_label = ("Day du (nguon ung dung da duoc tao)" if support == "full"
+                     else "Chi metadata (khong tao nguon ung dung)")
+    print(cli_ui.metadata("Ho tro scaffold", support_label))
     print()
 
     if runtime_id != "portable" and not runtime_ok:
@@ -2119,7 +2124,10 @@ def print_preview(project_name, project_type_id, selected_cap_ids,
     print(cli_ui.metadata("Type", project_type_id))
     caps = ", ".join(selected_cap_ids) if selected_cap_ids else "(none)"
     print(cli_ui.metadata("Capabilities", caps))
-    print(cli_ui.metadata("Stack", f"{tech_stack.get('bundle_name', bundle_id)} ({bundle_id})"))
+    from core.stack_scaffold import scaffold_support_for
+    support = scaffold_support_for(bundle_id)
+    support_label = "full" if support == "full" else "metadata-only (no app source scaffolded)"
+    print(cli_ui.metadata("Stack", f"{tech_stack.get('bundle_name', bundle_id)} ({bundle_id}) [{support_label}]"))
     print(cli_ui.metadata("Runtime", runtime_id))
     print()
 

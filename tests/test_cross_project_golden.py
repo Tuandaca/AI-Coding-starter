@@ -39,16 +39,20 @@ from core.stack_scaffold import scaffold_stack, write_gitignore, write_project_r
 CATALOG_DIR = REPO_ROOT / "catalog"
 RESOURCES_DIR = REPO_ROOT / "resources"
 
-# Every project type registered in project-types.yaml.
+# Every project type registered in project-types.yaml, including the
+# fallback types ``other`` and ``not-decided`` (previously omitted from
+# cross-project coverage).
 PROJECT_TYPES = (
     "portfolio", "landing-page", "business-website", "blog-content",
     "e-commerce", "saas", "fullstack-application", "dashboard",
     "backend-api", "mobile-application", "ai-rag", "ai-agent",
-    "realtime-application", "desktop-application",
+    "realtime-application", "desktop-application", "other", "not-decided",
 )
 
 # Representative capabilities per project type (kept minimal; none are
 # authentication/payments unless the domain genuinely calls for them).
+# Fallback types ``other`` / ``not-decided`` declare no capabilities and
+# receive the minimal global core team.
 REPRESENTATIVE_CAPABILITIES = {
     "portfolio": ["accessibility", "i18n"],
     "landing-page": ["i18n"],
@@ -64,9 +68,12 @@ REPRESENTATIVE_CAPABILITIES = {
     "ai-agent": ["ai"],
     "realtime-application": ["realtime"],
     "desktop-application": [],
+    "other": [],
+    "not-decided": [],
 }
 
 # Stack bundle chosen per project type (must be a valid pair in the catalog).
+# Fallback types resolve against a static bundle (no backend assumptions).
 STACK_BUNDLE = {
     "portfolio": "react-static",
     "landing-page": "react-static",
@@ -82,6 +89,8 @@ STACK_BUNDLE = {
     "ai-agent": "ai-rag-python",
     "realtime-application": "nextjs-supabase",
     "desktop-application": "tauri-react-sqlite",
+    "other": "react-static",
+    "not-decided": "react-static",
 }
 
 # Cross-domain resources that must NEVER appear for the listed project types.

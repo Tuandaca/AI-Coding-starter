@@ -15,20 +15,54 @@ Architecture:
             ↓
     ResourceSelectionResult
 
+Resolution pipeline (Section 4):
+
+    PROJECT CONTEXT
+        → CANDIDATE DISCOVERY (resource-requirements.yaml per project type,
+           execution packs, Agency catalog)
+        → RESOURCE APPLICABILITY / ELIGIBILITY FILTER  (Section 5 single
+           evaluator; catalog/resource-applicability.yaml is the canonical
+           (type, id)-keyed source of truth)
+        → RELEVANCE / SPECIALTY SCORING  (Agency agents via
+           core/agency_scoring.py; bundled resources score 0)
+        → DEPENDENCY + CONFLICT VALIDATION  (requires / conflicts_with see
+           resources selected earlier during the same resolution via a
+           deterministic fixed-point)
+        → TEAM / RESOURCE BUDGET  (complexity-aware agent ceiling)
+        → DETERMINISTIC FINAL SELECTION
+        → resources.lock + portable materialization  (caller side)
+        → optional runtime rendering
+
 Design principles:
   * Runtime-agnostic. No vendor branches.
   * Offline. No network, no LLM.
   * Stdlib-only.
   * Honest inference: never guesses resource IDs; validates against registry.
   * (type, id) collision-safe.
-  * Capability-gated: a resource is activated ONLY when its explicit `when`
-    condition matches the resolved project context. Free-form `selection_reason`
-    always describes what actually triggered selection.
+  * INELIGIBLE RESOURCE MUST NEVER ENTER SCORING. This invariant applies
+    equally to bundled agents, Agency agents, skills, rules, workflows,
+    scripts, shared modules, and templates. Agency agents are NOT
+    special-cased around the eligibility layer.
   * Bounded activation: full catalog is knowledge base; resolver activates only
     a small team per project. Agent count follows a complexity-aware budget
     (minimal/static 4-6, balanced 5-8, complex 6-10, hard ceiling 10).
   * Specialty-aware: Agency agents are ranked by an explainable deterministic
     score; alphabetical id is only the final tie-break.
+
+`when` versus applicability (unambiguous semantics):
+  * ``when`` (per entry in resource-requirements.yaml) is the per-entry
+    ACTIVATION TRIGGER: does this resource fire for the current project
+    context (capability, stack bundle, project type, always)? It is evaluated
+    by _matches_conditions and describes the immediate trigger via
+    _selection_reason.
+  * applicability (catalog/resource-applicability.py, single evaluator
+    is_resource_eligible) is the resource-centric ELIGIBILITY GATE: is this
+    resource allowed to apply to this project context at all (project type,
+    capabilities, stack tags, requires, conflicts_with, global)? It blocks
+    cross-domain leakage regardless of which project type listed the resource.
+  * A resource is activated only when BOTH the eligibility gate passes AND the
+    ``when`` trigger matches. The two are deliberately separate; applicability
+    metadata is never re-derived from ``when``.
 """
 
 from __future__ import annotations
@@ -41,18 +75,17 @@ from typing import Optional
 from core.resource_registry import (
     ResourceCatalogLoader,
     ResourceRegistry,
-    build_default_registry,
 )
 from core.execution_pack_registry import (
     ExecutionPackRegistry,
     build_default_pack_registry,
 )
 from core.applicability import (
-    Applicability,
     ApplicabilityContext,
-    ApplicabilityResult,
+    ApplicabilityCatalog,
     is_resource_eligible,
 )
+from core.agency_scoring import AgencyScoringEngine
 
 # Canonical location of the resource requirements catalog relative to this module.
 DEFAULT_CATALOG_DIR = Path(__file__).resolve().parent.parent / "catalog"
@@ -85,42 +118,6 @@ PROFILE_AGENT_BUDGET: dict[str, tuple[int, int]] = {
     "custom": (5, 8),
 }
 DEFAULT_AGENT_BUDGET = (5, 8)  # used when the bundle profile is unknown
-
-# Agency division → relevant project type IDs (explicit, deterministic).
-# Used to rank agency specialists for a given project type. Divisions not
-# listed here contribute no agency specialists (empty set).
-DIVISION_PROJECT_TYPE_RELEVANCE: dict[str, set[str]] = {
-    "engineering": {
-        "saas", "fullstack-application", "backend-api", "ai-rag", "ai-agent",
-        "realtime-application", "desktop-application", "mobile-application",
-        "e-commerce",
-    },
-    "design": {
-        "portfolio", "landing-page", "business-website", "saas",
-        "fullstack-application",
-    },
-    "security": {
-        "e-commerce", "saas", "backend-api", "fullstack-application",
-    },
-    "testing": {
-        "saas", "fullstack-application", "e-commerce", "backend-api",
-    },
-    "product": {
-        "saas", "fullstack-application", "business-website",
-    },
-    "project-management": {
-        "saas", "fullstack-application",
-    },
-    "support": {
-        "saas", "e-commerce", "fullstack-application",
-    },
-    "research": {
-        "ai-rag", "ai-agent",
-    },
-    "specialized": {
-        "saas", "fullstack-application", "ai-agent", "ai-rag",
-    },
-}
 
 
 @dataclass(frozen=True)
@@ -184,13 +181,6 @@ class ResourceResolver:
     Selects a small active team from the full canonical registry
     (bundled + agency-agents). Never activates the entire catalog.
 
-    Resolution priority (§12):
-      1. Execution pack core roles (highest priority)
-      2. Project-type-relevant bundled resources (when conditions match)
-      3. Capability/stack-driven bundled resources (when conditions match)
-      4. Agency specialists relevant to project type (scored, specialty-aware)
-      5. Quality/safety roles (implied by capabilities)
-
     Team size policy (§13 / §17):
       Agent count follows a complexity-aware budget derived from the stack
       bundle profile, bounded by HARD_TEAM_CEILING (10).
@@ -236,69 +226,83 @@ class ResourceResolver:
         agent_budget = self._agent_budget_for_bundle(stack_bundle_id)
         agent_ceiling = min(agent_budget[1], HARD_TEAM_CEILING)
 
-        # --- Applicability registry (resource-centric eligibility filter) ---
-        # Built once per resolution; Section 5 single evaluator for all types.
-        self._applicability_registry = self._build_applicability_registry()
+        # --- Applicability catalog: single (type, id)-keyed source of truth ---
+        # for resource eligibility (Section 5 single evaluator). Loaded once per
+        # resolution; it is static catalog data.
+        self._applicability_catalog = ApplicabilityCatalog.load()
         # Stack technology tags derived from the selected bundle's technologies,
-        # used by the stack_tags eligibility axis.
+        # used by the stack_tags eligibility axis and Agency stack scoring.
         self._stack_tags = self._stack_tags_for_bundle(stack_bundle_id)
 
-        # --- Eligibility context (Section 5 single evaluator). selected
-        # so_far grows as roles are added so `requires`/`conflicts_with` can
-        # be evaluated against already-selected resources.
+        # --- Growing selection set (Section 6) ---
+        # `selected_so_far` grows as roles are added so `requires` /
+        # `conflicts_with` can be evaluated against resources selected earlier
+        # during the same resolution. A fresh context is built for every
+        # eligibility check so it always sees the current selection.
         selected_so_far: set[tuple[str, str]] = set()
 
-        def _ctx() -> ApplicabilityContext:
+        def _ctx_for(selected: set[tuple[str, str]]) -> ApplicabilityContext:
             return ApplicabilityContext(
                 project_type=project_type_id,
                 capabilities=frozenset(selected_caps),
                 stack_tags=self._stack_tags,
-                task_tags=frozenset(),
-                selected=frozenset(selected_so_far),
+                task_tags=frozenset(),  # task_tags unsupported at project level
+                selected=frozenset(selected),
             )
 
-        def _add_eligible_agent(role_id: str, reason: str) -> None:
-            """Add an execution-pack agent only if eligible (Section 4/6)."""
-            key = ("agent", role_id)
+        def _applicability_for(rtype: str, rid: str):
+            return self._applicability_catalog.get(rtype, rid)
+
+        def _add_if_eligible(
+            rtype: str, rid: str, reason: str
+        ) -> bool:
+            """Add a resource only if it passes the eligibility gate.
+
+            Returns True when the resource was added. Ineligible resources
+            never enter scoring, regardless of reason or source.
+            """
+            key = (rtype, rid)
             if key in seen:
-                return
-            applicability = self._applicability_registry.get(key)
-            if not is_resource_eligible(applicability, _ctx()).applicable:
-                # Ineligible: never enters scoring, regardless of pack role.
-                return
-            if not self._registry_has("agent", role_id):
-                errors.append(f"Resource not found in registry: agent:{role_id}")
-                return
+                return False
+            if not self._registry_has(rtype, rid):
+                errors.append(f"Resource not found in registry: {rtype}:{rid}")
+                return False
+            eligibility = is_resource_eligible(
+                _applicability_for(rtype, rid), _ctx_for(selected_so_far)
+            )
+            if not eligibility.applicable:
+                # Ineligible: never enters scoring, regardless of source.
+                return False
             seen.add(key)
             selected_so_far.add(key)
             resources.append(
                 self._make_selection(
-                    "agent", role_id, reason,
+                    rtype, rid, reason,
                     pack_core_roles=pack_core_roles,
                     selected_caps=selected_caps,
                     project_type_id=project_type_id,
                     stack_bundle_id=stack_bundle_id,
                 )
             )
+            return True
 
-        # --- 1. Execution pack core roles (highest priority) --------------
-        pack = None
         pack_core_roles: list[str] = []
+
+        # --- 1. Execution pack core roles (highest priority) ---------------
+        pack = None
         if execution_pack_id is not None and self.pack_registry is not None:
             pack = self.pack_registry.get(execution_pack_id)
             if pack is None:
-                errors.append(
-                    f"Execution pack not found: {execution_pack_id!r}"
-                )
+                errors.append(f"Execution pack not found: {execution_pack_id!r}")
             else:
                 pack_core_roles = list(pack.core_roles)
                 for role_id in pack_core_roles:
-                    _add_eligible_agent(
-                        role_id,
+                    _add_if_eligible(
+                        "agent", role_id,
                         f"execution-pack:{pack.id} core-role",
                     )
 
-        # --- 2. Execution pack optional roles (trigger-matched) -----------
+        # --- 2. Execution pack optional roles (trigger-matched) ------------
         if pack is not None:
             for opt_role in pack.optional_roles:
                 triggered = False
@@ -315,120 +319,127 @@ class ResourceResolver:
                 if not triggered:
                     continue
 
-                _add_eligible_agent(
-                    opt_role.resource_id,
+                _add_if_eligible(
+                    "agent", opt_role.resource_id,
                     f"execution-pack:{pack.id} optional-role "
                     f"({opt_role.activation})",
                 )
 
         # --- 3. Project-type + capability/stack-driven bundled resources --
-        # Every base resource carries an explicit `when` condition. A resource
-        # is activated ONLY when its condition matches the resolved context.
-        # This replaces the old free-form "capability:<id>" reason parsing.
+        # Eligibility gate (Section 5) THEN `when` activation trigger. Both
+        # must pass. The fixed-point loop re-checks eligibility against
+        # `selected_so_far` as it grows, so `requires`/`conflicts_with` see
+        # resources selected earlier during the same resolution.
         pt_resources = self._load_project_type_resources(project_type_id)
 
-        # Eligibility context for the Section 5 single evaluator. Selected
-        # resources so far are threaded in to evaluate `requires` /
-        # `conflicts_with` axes.
-        selected_so_far: set[tuple[str, str]] = {
-            (r.type, r.id) for r in resources if r.type != "agent"
-        }
-        selected_so_far.update((r.type, r.id) for r in resources if r.type == "agent")
-        ctx = ApplicabilityContext(
-            project_type=project_type_id,
-            capabilities=frozenset(selected_caps),
-            stack_tags=self._stack_tags,
-            task_tags=frozenset(),
-            selected=frozenset(selected_so_far),
-        )
-
-        for res_def in pt_resources:
-            rid = res_def.get("id", "")
-            rtype = res_def.get("type", "")
-            if not rid or not rtype:
-                errors.append(f"Invalid resource entry: missing id or type: {res_def}")
-                continue
-            key = (rtype, rid)
-            if key in seen:
-                continue
-            if not self._registry_has(rtype, rid):
-                errors.append(f"Resource not found in registry: {rtype}:{rid}")
-                continue
-            # --- ELIGIBILITY FILTER (Section 4 / Section 6) ---
-            # Ineligible resources never enter scoring, regardless of score.
-            applicability = self._applicability_registry.get(key)
-            eligibility = is_resource_eligible(applicability, ctx)
-            if not eligibility.applicable:
-                # Ineligible for this project context; skip without scoring.
-                continue
-            if not self._matches_conditions(
-                res_def, project_type_id, selected_caps, stack_bundle_id
-            ):
-                # Condition not met: resource stays inactive for this project.
-                continue
-            seen.add(key)
-            reason = self._selection_reason(
-                res_def, project_type_id, selected_caps, stack_bundle_id
-            )
-            resources.append(
-                self._make_selection(
-                    rtype, rid, reason,
-                    pack_core_roles=pack_core_roles,
-                    selected_caps=selected_caps,
-                    project_type_id=project_type_id,
-                    stack_bundle_id=stack_bundle_id,
-                )
-            )
-
-        # --- 4. Agency specialists relevant to project type (scored) ------
-        # Count agents so far (pack core + optional + bundled agents).
-        agent_count = sum(1 for r in resources if r.type == "agent")
-        agent_slots_remaining = max(0, agent_ceiling - agent_count)
-        if agent_slots_remaining > 0:
-            agency_agents = self._select_agency_specialists(
-                project_type_id,
-                selected_caps,
-                stack_bundle_id,
-                pack_core_roles,
-                limit=agent_slots_remaining,
-            )
-            for agent in agency_agents:
-                if agent_count >= agent_ceiling:
-                    break
-                key = ("agent", agent.id)
+        changed = True
+        while changed:
+            changed = False
+            for res_def in pt_resources:
+                rid = res_def.get("id", "")
+                rtype = res_def.get("type", "")
+                if not rid or not rtype:
+                    errors.append(f"Invalid resource entry: missing id or type: {res_def}")
+                    continue
+                key = (rtype, rid)
                 if key in seen:
                     continue
-                seen.add(key)
-                agent_count += 1
-                score, breakdown = self._score_agency_agent(
-                    agent, project_type_id, selected_caps,
-                    stack_bundle_id, pack_core_roles
+                if not self._registry_has(rtype, rid):
+                    errors.append(f"Resource not found in registry: {rtype}:{rid}")
+                    continue
+                # ELIGIBILITY FILTER (Section 4 / Section 6).
+                eligibility = is_resource_eligible(
+                    _applicability_for(rtype, rid), _ctx_for(selected_so_far)
                 )
-                reason = (
-                    f"agency-division:{agent.division} relevance to "
-                    f"project-type:{project_type_id} (score {score})"
+                if not eligibility.applicable:
+                    continue
+                # WHEN activation trigger (per-entry trigger, separate from
+                # eligibility). Condition not met: resource stays inactive.
+                if not self._matches_conditions(
+                    res_def, project_type_id, selected_caps, stack_bundle_id
+                ):
+                    continue
+                seen.add(key)
+                selected_so_far.add(key)
+                changed = True
+                reason = self._selection_reason(
+                    res_def, project_type_id, selected_caps, stack_bundle_id
                 )
                 resources.append(
-                    ResourceSelection(
-                        id=agent.id,
-                        type="agent",
-                        version="1.0.0",
-                        provenance_source=agent.provenance.get("source", "agency-agents"),
-                        provenance_commit_sha=agent.provenance.get(
-                            "upstream_commit",
-                            "8b61d297dc07772a000b85fc93138c8aefd21c45",
-                        ),
-                        provenance_license=agent.provenance.get("license", "MIT"),
-                        selection_reason=reason,
-                        name=agent.name,
-                        description=agent.description,
-                        division=agent.division,
-                        score=score,
-                        score_breakdown=breakdown,
+                    self._make_selection(
+                        rtype, rid, reason,
+                        pack_core_roles=pack_core_roles,
+                        selected_caps=selected_caps,
+                        project_type_id=project_type_id,
+                        stack_bundle_id=stack_bundle_id,
                     )
                 )
 
-        # --- 5. Enforce team size ceiling ---------------------------------
+        # --- 4. Agency specialists relevant to project type (scored) -------
+        # Agency agents go through the SAME eligibility filter before scoring.
+        # An ineligible agent never enters ranking. The Agency scoring engine
+        # applies the evidence threshold: division relevance alone never
+        # qualifies an agent for activation.
+        agent_count = sum(1 for r in resources if r.type == "agent")
+        agent_slots_remaining = max(0, agent_ceiling - agent_count)
+        if agent_slots_remaining > 0:
+            agency_engine = AgencyScoringEngine(
+                self.registry,
+                self._applicability_catalog,
+                pack_core_roles=pack_core_roles,
+            )
+            scoring_result = agency_engine.select_candidates(
+                project_type_id,
+                selected_caps,
+                self._stack_tags,
+                limit=agent_slots_remaining,
+            )
+            for candidate in scoring_result.selected:
+                if agent_count >= agent_ceiling:
+                    break
+                key = ("agent", candidate.agent.id)
+                if key in seen:
+                    continue
+                # Final eligibility re-check against the current selection
+                # (defensive: Agency engine already filters, but the gate
+                # applies to every source equally).
+                eligibility = is_resource_eligible(
+                    _applicability_for("agent", candidate.agent.id),
+                    _ctx_for(selected_so_far),
+                )
+                if not eligibility.applicable:
+                    continue
+                seen.add(key)
+                selected_so_far.add(key)
+                agent_count += 1
+                resources.append(
+                    ResourceSelection(
+                        id=candidate.agent.id,
+                        type="agent",
+                        version="1.0.0",
+                        provenance_source=candidate.agent.provenance.get(
+                            "source", "agency-agents"
+                        ),
+                        provenance_commit_sha=candidate.agent.provenance.get(
+                            "upstream_commit",
+                            "8b61d297dc07772a000b85fc93138c8aefd21c45",
+                        ),
+                        provenance_license=candidate.agent.provenance.get(
+                            "license", "MIT"
+                        ),
+                        selection_reason=(
+                            f"agency:{candidate.qualification_reason} "
+                            f"(score {candidate.score})"
+                        ),
+                        name=candidate.agent.name,
+                        description=candidate.agent.description,
+                        division=candidate.agent.division,
+                        score=candidate.score,
+                        score_breakdown=candidate.breakdown.components,
+                    )
+                )
+
+        # --- 5. Enforce team size ceiling ----------------------------------
         if agent_count > HARD_TEAM_CEILING:
             agent_resources = [r for r in resources if r.type == "agent"]
             non_agent = [r for r in resources if r.type != "agent"]
@@ -461,9 +472,11 @@ class ResourceResolver:
     ) -> bool:
         """Evaluate a resource entry's explicit `when` activation condition.
 
-        Returns True when the resource should be activated for the resolved
-        project context. Missing or empty `when` defaults to `always` for
-        backward compatibility with older catalog entries.
+        `when` is the per-entry ACTIVATION TRIGGER, evaluated separately from
+        resource eligibility (see module docstring for the unambiguous
+        `when` versus applicability semantics). Missing or empty `when`
+        defaults to `always` for backward compatibility with older catalog
+        entries.
         """
         when = defn.get("when")
         if not when:
@@ -497,7 +510,11 @@ class ResourceResolver:
         selected_caps: list[str],
         stack_bundle_id: str,
     ) -> str:
-        """Describe what actually triggered selection of a resource."""
+        """Describe what actually triggered selection of a resource.
+
+        Reports the `when` activation trigger that fired (or the entry's
+        static `reason`). Never claims a capability that was not selected.
+        """
         reason = defn.get("reason", f"project-type:{project_type_id}")
         when = defn.get("when") or {}
         if not isinstance(when, dict):
@@ -519,116 +536,6 @@ class ResourceResolver:
         if isinstance(ptypes, list) and ptypes and project_type_id in ptypes:
             return f"project-type:{project_type_id}"
         return reason
-
-    # -- agency scoring ----------------------------------------------------
-    def _relevant_divisions(self, project_type_id: str) -> set[str]:
-        return {
-            div for div, pts in DIVISION_PROJECT_TYPE_RELEVANCE.items()
-            if project_type_id in pts
-        }
-
-    def _score_agency_agent(
-        self,
-        agent,
-        project_type_id: str,
-        selected_caps: list[str],
-        stack_bundle_id: str,
-        pack_core_roles: list[str],
-    ) -> tuple[int, list[tuple[str, int]]]:
-        """Explainable deterministic score for an agency agent.
-
-        Relative priority (§15):
-          execution-pack core role +100
-          capability match +40
-          project-type match +30
-          stack/technology match +20
-          specialty/tag match +10
-          division relevance +5
-          alphabetical id is the final tie-break (applied by the caller).
-        """
-        score = 0
-        breakdown: list[tuple[str, int]] = []
-
-        agent_id = str(agent.id)
-        divisions = set(agent.division) if agent.division else set()
-        relevant_divisions = self._relevant_divisions(project_type_id)
-
-        # 1. Execution pack core role match (+100)
-        if agent_id in set(pack_core_roles):
-            score += 100
-            breakdown.append(("execution-pack-core-role", 100))
-
-        # 2. Selected capability match (+40)
-        agent_caps = set(str(c) for c in (agent.capabilities or []))
-        cap_matches = agent_caps & set(selected_caps)
-        if cap_matches:
-            score += 40
-            breakdown.append(("capability-match", 40))
-
-        # 3. Project-type match (+30)
-        agent_ptypes = set(str(p) for p in (agent.project_types or []))
-        if project_type_id and project_type_id in agent_ptypes:
-            score += 30
-            breakdown.append(("project-type-match", 30))
-
-        # 4. Stack/technology match (+20): agent tags matching the stack bundle
-        #    id or the project-type-aligned technology hints carried in tags.
-        agent_tags = set(str(t) for t in (agent.tags or []))
-        stack_hint = {stack_bundle_id} if stack_bundle_id else set()
-        stack_matches = agent_tags & stack_hint
-        if stack_matches:
-            score += 20
-            breakdown.append(("stack-technology-match", 20))
-
-        # 5. Specialty/tag match (+10): agent tags matching selected capabilities
-        tag_matches = agent_tags & set(selected_caps)
-        if tag_matches:
-            score += 10
-            breakdown.append(("specialty-tag-match", 10))
-
-        # 6. Division relevance (+5)
-        if agent.division and agent.division in relevant_divisions:
-            score += 5
-            breakdown.append(("division-relevance", 5))
-
-        return score, breakdown
-
-    def _select_agency_specialists(
-        self,
-        project_type_id: str,
-        selected_caps: list[str],
-        stack_bundle_id: str,
-        pack_core_roles: list[str],
-        limit: int = SPECIALIST_MAX,
-    ) -> list:
-        """Select agency agents relevant to the project type, scored.
-
-        Agents are ranked by descending score with the agent id as the final
-        deterministic tie-break. Returns up to ``limit`` entries.
-        """
-        relevant_divisions = self._relevant_divisions(project_type_id)
-        if not relevant_divisions or limit <= 0:
-            return []
-
-        candidates: list = []
-        for agent in self.registry.list_agents():
-            if agent.division in relevant_divisions:
-                candidates.append(agent)
-        if not candidates:
-            return []
-
-        pack_core_set = set(pack_core_roles)
-        scored = []
-        for agent in candidates:
-            score, breakdown = self._score_agency_agent(
-                agent, project_type_id, selected_caps,
-                stack_bundle_id, pack_core_roles,
-            )
-            scored.append((score, agent.id, agent, breakdown))
-
-        # Descending score; final tie-break ascending id (deterministic).
-        scored.sort(key=lambda item: (-item[0], item[1]))
-        return [item[2] for item in scored[:limit]]
 
     # -- helpers ------------------------------------------------------------
     def _agent_budget_for_bundle(self, stack_bundle_id: str) -> tuple[int, int]:
@@ -656,7 +563,12 @@ class ResourceResolver:
     def _load_project_type_resources(
         self, project_type_id: str
     ) -> list[dict]:
-        """Load resource-requirements.yaml entries for a project type."""
+        """Load resource-requirements.yaml entries for a project type.
+
+        Candidate discovery only: returns the resources a project type lists.
+        Eligibility is decided separately by the applicability engine, so a
+        listed resource is not automatically activated.
+        """
         path = DEFAULT_CATALOG_DIR / "resource-requirements.yaml"
         try:
             with open(path, "r", encoding="utf-8") as handle:
@@ -673,23 +585,13 @@ class ResourceResolver:
                 return entry.get("resources", [])
         return []
 
-    def _load_all_requirements(self) -> list[dict]:
-        """Load all resource-requirements.yaml entries (every project type)."""
-        path = DEFAULT_CATALOG_DIR / "resource-requirements.yaml"
-        try:
-            with open(path, "r", encoding="utf-8") as handle:
-                data = json.load(handle)
-        except (FileNotFoundError, json.JSONDecodeError):
-            return []
-        if not isinstance(data, dict):
-            return []
-        requirements = data.get("resource_requirements", [])
-        if not isinstance(requirements, list):
-            return []
-        return requirements
-
     def _stack_tags_for_bundle(self, stack_bundle_id: str) -> frozenset[str]:
-        """Derive stack technology tags from the bundle's technologies."""
+        """Derive stack technology tags from the bundle's technologies.
+
+        Returns the technology values (e.g. nextjs, postgresql) plus the
+        bundle id itself. Agency stack_tags are compared against this set, not
+        merely the bundle id.
+        """
         if not stack_bundle_id:
             return frozenset()
         path = DEFAULT_CATALOG_DIR / "stack-bundles.yaml"
@@ -708,158 +610,9 @@ class ResourceResolver:
             for role_value in bundle.get("technologies", {}).values():
                 if role_value:
                     tags.add(str(role_value))
-            # The bundle id itself is also a useful stack tag.
             tags.add(stack_bundle_id)
             return frozenset(tags)
         return frozenset()
-
-    def _merge_applicability(
-        self, base: Applicability, overlay: Applicability
-    ) -> Applicability:
-        """Merge two applicability records for the same (type, id).
-
-        Lists are unioned (permissive); exclusions are unioned so any
-        explicitly-excluded project type wins. Booleans are OR'd.
-        """
-        return Applicability(
-            id=base.id,
-            type=base.type,
-            project_types_include=frozenset(
-                set(base.project_types_include) | set(overlay.project_types_include)
-            ),
-            project_types_exclude=frozenset(
-                set(base.project_types_exclude) | set(overlay.project_types_exclude)
-            ),
-            capabilities_any=frozenset(
-                set(base.capabilities_any) | set(overlay.capabilities_any)
-            ),
-            capabilities_all=frozenset(
-                set(base.capabilities_all) | set(overlay.capabilities_all)
-            ),
-            capabilities_none=frozenset(
-                set(base.capabilities_none) | set(overlay.capabilities_none)
-            ),
-            stack_tags_any=frozenset(
-                set(base.stack_tags_any) | set(overlay.stack_tags_any)
-            ),
-            stack_tags_all=frozenset(
-                set(base.stack_tags_all) | set(overlay.stack_tags_all)
-            ),
-            task_tags_any=frozenset(
-                set(base.task_tags_any) | set(overlay.task_tags_any)
-            ),
-            reusable=base.reusable or overlay.reusable,
-            is_global=base.is_global or overlay.is_global,
-            requires=frozenset(set(base.requires) | set(overlay.requires)),
-            conflicts_with=frozenset(
-                set(base.conflicts_with) | set(overlay.conflicts_with)
-            ),
-        )
-
-    def _build_applicability_registry(
-        self,
-    ) -> dict[tuple[str, str], Applicability]:
-        """Build a resource-centric applicability registry.
-
-        Each (type, id) maps to an Applicability derived from the
-        resource-requirements.yaml entries. Entries for the same resource
-        are merged (lists unioned; exclusions unioned). A resource that is
-        ineligible for a project context never enters scoring (Section 6).
-        """
-        registry: dict[tuple[str, str], Applicability] = {}
-        for entry in self._load_all_requirements():
-            resources = entry.get("resources", [])
-            if not isinstance(resources, list):
-                continue
-            for res_def in resources:
-                rid = res_def.get("id")
-                rtype = res_def.get("type")
-                if not rid or not rtype:
-                    continue
-                key = (rtype, rid)
-                app = self._applicability_from_entry(res_def)
-                if key in registry:
-                    registry[key] = self._merge_applicability(registry[key], app)
-                else:
-                    registry[key] = app
-        return registry
-
-    def _applicability_from_entry(self, res_def: dict) -> Applicability:
-        """Derive an Applicability from a single resource-requirements entry."""
-        rid = str(res_def.get("id", ""))
-        rtype = str(res_def.get("type", ""))
-        app = res_def.get("applicability")
-        if not isinstance(app, dict):
-            app = {}
-        when = res_def.get("when")
-        if not isinstance(when, dict):
-            when = {}
-
-        project_types_include: set[str] = set(
-            str(p) for p in (app.get("project_types_include") or [])
-        )
-        project_types_exclude: set[str] = set(
-            str(p) for p in (app.get("project_types_exclude") or [])
-        )
-        capabilities_any: set[str] = set(
-            str(c) for c in (app.get("capabilities_any") or [])
-        )
-        capabilities_all: set[str] = set(
-            str(c) for c in (app.get("capabilities_all") or [])
-        )
-        capabilities_none: set[str] = set(
-            str(c) for c in (app.get("capabilities_none") or [])
-        )
-        stack_tags_any: set[str] = set(
-            str(t) for t in (app.get("stack_tags_any") or [])
-        )
-        stack_tags_all: set[str] = set(
-            str(t) for t in (app.get("stack_tags_all") or [])
-        )
-        task_tags_any: set[str] = set(
-            str(t) for t in (app.get("task_tags_any") or [])
-        )
-
-        # Derive capability / stack gating from `when` when explicit
-        # applicability fields are absent, so existing `when` entries keep
-        # their eligibility semantics.
-        w_caps_any = when.get("capabilities_any")
-        if isinstance(w_caps_any, list) and not capabilities_any:
-            capabilities_any.update(str(c) for c in w_caps_any)
-        w_caps_all = when.get("capabilities_all")
-        if isinstance(w_caps_all, list) and not capabilities_all:
-            capabilities_all.update(str(c) for c in w_caps_all)
-        w_bundles = when.get("stack_bundles")
-        if isinstance(w_bundles, list) and not stack_tags_any:
-            stack_tags_any.update(str(b) for b in w_bundles)
-
-        requires: set[tuple[str, str]] = set()
-        for req in (app.get("requires") or []):
-            if isinstance(req, list) and len(req) == 2:
-                requires.add((str(req[0]), str(req[1])))
-        conflicts: set[tuple[str, str]] = set()
-        for conf in (app.get("conflicts_with") or []):
-            if isinstance(conf, list) and len(conf) == 2:
-                conflicts.add((str(conf[0]), str(conf[1])))
-
-        return Applicability(
-            id=rid,
-            type=rtype,
-            project_types_include=frozenset(project_types_include),
-            project_types_exclude=frozenset(project_types_exclude),
-            capabilities_any=frozenset(capabilities_any),
-            capabilities_all=frozenset(capabilities_all),
-            capabilities_none=frozenset(capabilities_none),
-            stack_tags_any=frozenset(stack_tags_any),
-            stack_tags_all=frozenset(stack_tags_all),
-            task_tags_any=frozenset(task_tags_any),
-            reusable=bool(app.get("reusable", False)),
-            is_global=bool(
-                app.get("global", False) or app.get("is_global", False)
-            ),
-            requires=frozenset(requires),
-            conflicts_with=frozenset(conflicts),
-        )
 
     def _make_selection(
         self,
@@ -875,7 +628,7 @@ class ResourceResolver:
         from the registry ref (falls back to bundled defaults when ref absent).
 
         Bundled resources always score 0; agency agents are scored by the
-        caller when relevant.
+        Agency scoring engine when relevant.
         """
         DEFAULT_SHA = "8b61d297dc07772a000b85fc93138c8aefd21c45"
         ref = self.registry.get(rtype, rid)

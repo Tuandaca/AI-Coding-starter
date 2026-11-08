@@ -307,9 +307,25 @@ def write_project_readme(
     """Write the generated project's own ``README.md``.
 
     Not a copy of the starter's README; it documents the generated project.
+    The stack scaffold support level is displayed honestly: a ``metadata-only``
+    bundle means no application source code was scaffolded.
     """
     dest = Path(dest_dir)
     caps = ", ".join(capabilities) if capabilities else "None"
+    support = scaffold_support_for(stack_bundle)
+    if support == "full":
+        support_line = (
+            "- **Stack scaffold support**: full — functional application "
+            "source code was scaffolded from offline templates."
+        )
+    else:
+        support_line = (
+            "- **Stack scaffold support**: metadata-only — no application "
+            "source code was scaffolded for this bundle. The generated project "
+            "contains canonical AI-Coding-starter state and portable resources "
+            "only; application source code was NOT created and must be added "
+            "by the user (or by a future scaffold roadmap bundle)."
+        )
     lines = [
         f"# {project_name}",
         "",
@@ -320,6 +336,7 @@ def write_project_readme(
         f"- **Stack**: {stack_bundle}",
         f"- **Capabilities**: {caps}",
         f"- **Runtime**: {runtime_id}",
+        support_line,
         f"- **Canonical state**: `{instructions_dir}/` (project.yaml, state.yaml, resources.lock)",
         f"- **Portable AI workspace**: `.ai-workspace/`",
         "",
