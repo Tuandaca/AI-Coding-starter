@@ -7,9 +7,9 @@ Branch: `feat/final-resource-hardening` (NOT merged to master, no tag, no releas
 | Field | Value |
 |---|---|
 | Base SHA (master) | `4e86a2121c9da4b6ed324eeafcb73e60f51d0f27` |
-| Final branch SHA | `0b1e2e20704e0c470d17bcdaf4e8e014c526bbf9` |
+| Final branch SHA | `a90bb66f7fa69d87b73786cfe86701ca74d25701` |
 | Branch | `feat/final-resource-hardening` |
-| Commits created | 1 (`0b1e2e2`) |
+| Commits created | 2 (`0b1e2e2` hardening, `a90bb66` docs report) |
 | Working tree status | clean (`git status --short` empty) |
 | VERSION | 2.1.1 (unchanged) |
 
