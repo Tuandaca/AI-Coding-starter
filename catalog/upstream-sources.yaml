@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
-  "catalog_version": "2026.11.06-1",
-  "reviewed_date": "2026-11-06",
+  "catalog_version": "2026.11.24-1",
+  "reviewed_date": "2026-11-24",
   "sources": [
     {
       "id": "ai-coding-starter-bundled",
@@ -386,10 +386,10 @@
       "commit_sha": "612eee2518ef84cc573e491fdee5fa5c90264cb5",
       "license": "MIT",
       "classification": "optional-external-integration",
-      "reviewed_date": "2026-11-06",
+      "reviewed_date": "2026-11-24",
       "selected_resource_ids": [],
       "import_version": null,
-      "notes": "Optional code intelligence provider. Not imported by M7; M9 owns integration. Verified commit via GitHub API on 2026-11-06."
+      "notes": "Optional code intelligence provider. M9 integration implemented in core/cbm_integration.py and core/capability_provider_registry.py. Verified commit via GitHub API on 2026-11-06."
     },
     {
       "id": "openmontage",

@@ -49,6 +49,7 @@ from core.state import (
 )  # noqa: E402
 from core.portable_renderer import render_all, render_portable_workspace  # noqa: E402
 from core.stack_scaffold import scaffold_stack, write_gitignore, write_project_readme  # noqa: E402
+from core.cbm_integration import maybe_initialize_cbm  # noqa: E402
 from core import cli_ui  # noqa: E402
 
 # generic-renderer.py has a hyphen in its file name, so use importlib.
@@ -1843,25 +1844,49 @@ def main():
         focus="",
         canonical_branch=None,
     )
+
+    # M9: Check CBM availability for optional provider entry in resources.lock
+    from core.cbm_integration import get_cbm_provider_info
+    cbm_provider_info = get_cbm_provider_info()
+
+    lock_resources = [
+        {
+            "id": r.id,
+            "type": r.type,
+            "version": r.version,
+            "provenance": {
+                "source": r.provenance_source,
+                "commit_sha": r.provenance_commit_sha,
+                "license": r.provenance_license,
+                "reviewed_date": BUNDLED_REVIEWED_DATE,
+                "transformation": "none",
+            },
+            "selection_reason": r.selection_reason,
+        }
+        for r in resource_selection.resources
+    ]
+
+    # Add CBM as optional capability provider if available
+    if cbm_provider_info:
+        lock_resources.append({
+            "id": "codebase-memory",
+            "type": "capability-provider",
+            "version": "1.0.0",
+            "provenance": {
+                "source": "codebase-memory-mcp",
+                "commit_sha": "612eee2518ef84cc573e491fdee5fa5c90264cb5",
+                "license": "MIT",
+                "reviewed_date": "2026-11-24",
+                "transformation": "none",
+            },
+            "selection_reason": "capability:code-intelligence (optional provider)",
+            "runtime_representations": cbm_provider_info,
+        })
+
     lock = build_resources_lock(
         bundle_id,
         requested_bundle_id=bundle_id,
-        resources=[
-            {
-                "id": r.id,
-                "type": r.type,
-                "version": r.version,
-                "provenance": {
-                    "source": r.provenance_source,
-                    "commit_sha": r.provenance_commit_sha,
-                    "license": r.provenance_license,
-                    "reviewed_date": BUNDLED_REVIEWED_DATE,
-                    "transformation": "none",
-                },
-                "selection_reason": r.selection_reason,
-            }
-            for r in resource_selection.resources
-        ]
+        resources=lock_resources
     )
 
     # Step 5: Runtime selection
@@ -2013,6 +2038,16 @@ def main():
     support_label = ("Day du (nguon ung dung da duoc tao)" if support == "full"
                      else "Chi metadata (khong tao nguon ung dung)")
     print(cli_ui.metadata("Ho tro scaffold", support_label))
+    print()
+
+    # M9: Optional Codebase Memory integration (fail-open)
+    cbm_result = maybe_initialize_cbm(full_project_path, interactive=False)
+    if cbm_result.get("initialized"):
+        print(cli_ui.success(f"Codebase Memory: {cbm_result.get('message', 'initialized')}"))
+        # Add CBM provider info to resources.lock for future reference
+        # (This is optional and non-blocking)
+    elif cbm_result.get("message"):
+        print(cli_ui.info(f"Codebase Memory: {cbm_result['message']}"))
     print()
 
     if runtime_id != "portable" and not runtime_ok:
