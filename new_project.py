@@ -34,6 +34,7 @@ from core.resource_resolver import resolve_resources
 
 # M4: portable canonical state + derived Markdown (separate layer; the M3
 # resolver stays pure and never writes files).
+from core.resource_lock import build_resources_lock_with_hashes  # noqa: E402
 from core.spec import (
     build_project_spec,
     read_project_spec,
@@ -49,7 +50,8 @@ from core.state import (
 )  # noqa: E402
 from core.portable_renderer import render_all, render_portable_workspace  # noqa: E402
 from core.stack_scaffold import scaffold_stack, write_gitignore, write_project_readme  # noqa: E402
-from core.cbm_integration import maybe_initialize_cbm  # noqa: E402
+from core.agency_specialists import get_all_specialists, get_pack, get_packs_for_project_type, get_specialists_for_pack
+from core.cbm_integration import maybe_initialize_cbm, get_cbm_provider_info  # noqa: E402
 from core.agent_reach_integration import maybe_initialize_agent_reach, get_agent_reach_provider_info  # noqa: E402
 from core.orca_integration import maybe_initialize_orca, get_orca_provider_info  # noqa: E402
 from core import cli_ui  # noqa: E402
@@ -1708,6 +1710,62 @@ def select_bundle(result, catalog):
         print_error("Lựa chọn không hợp lệ!")
 
 
+def select_team_pack(catalog, project_type_id: str, bundle_id: str) -> tuple[str, list[str]]:
+    """Step 4: Select team pack and specialist agents for the project.
+
+    Returns:
+        Tuple of (selected_pack_id, list_of_specialist_ids)
+    """
+    from core.agency_specialists import get_all_specialists, get_packs_for_project_type, get_specialists_for_pack
+
+    specialists = get_all_specialists()
+    recommended_packs = get_packs_for_project_type(project_type_id)
+
+    print()
+    print(cli_ui.section("BƯỚC 4: TEAM PACK (chọn chuyên gia cho dự án)"))
+
+    if not recommended_packs:
+        print_info("Không có team pack nào được khuyến nghị cho loại dự án này.")
+        print_info("Sẽ chỉ sử dụng core team mặc định.")
+        core_specialists = [s.id for s in specialists if s.activation == "always"]
+        return "default", core_specialists
+
+    print("Team pack được khuyến nghị cho dự án này:")
+    for i, pack_id in enumerate(recommended_packs, 1):
+        pack = get_pack(pack_id)
+        if not pack:
+            continue
+        core_count = len(pack["core"])
+        specialist_count = len(pack["specialists"])
+        print(cli_ui.option(str(i), pack["name"], f"{pack['description']} (core: {core_count}, specialists: {specialist_count})"))
+
+    print()
+    print("  0. Chỉ core team (không chuyên gia bổ sung)")
+    print()
+
+    while True:
+        selection = get_input(f"Chọn team pack (0-{len(recommended_packs)}) hoặc Enter để chọn pack đầu tiên: ", "1")
+        if not selection:
+            selection = "1"
+        try:
+            idx = int(selection.strip())
+            if idx == 0:
+                core_specialists = [s.id for s in specialists if s.activation == "always"]
+                return "core-only", core_specialists
+            elif 1 <= idx <= len(recommended_packs):
+                selected_pack_id = recommended_packs[idx - 1]
+                pack = get_pack(selected_pack_id)
+                if pack:
+                    all_specialist_ids = pack["core"] + pack["specialists"]
+                    # Verify they exist in our filtered catalog
+                    valid_ids = [sid for sid in all_specialist_ids if any(s.id == sid for s in specialists)]
+                    return selected_pack_id, valid_ids
+                return selected_pack_id, []
+        except ValueError:
+            pass
+        print_error("Lựa chọn không hợp lệ!")
+
+
 def bundle_to_tech_stack(bundle, project_type_name=None):
     """Convert a StackBundle into the legacy tech_stack dict shape."""
     techs = bundle.technologies
@@ -1817,6 +1875,9 @@ def main():
     project_type_display = catalog.project_types[project_type_id].name
     tech_stack = bundle_to_tech_stack(bundle, project_type_display)
 
+    # Step 4 (NEW): Select team pack and specialist agents
+    team_pack_id, specialist_ids = select_team_pack(catalog, project_type_id, bundle_id)
+
     # Step 3b (M7): Resolve resources using declarative adapter model.
     # CF-5: the same effective resource root (bundled or external fallback)
     # is used by both the resolver and the copier so authority is consistent.
@@ -1838,6 +1899,8 @@ def main():
         project_type_id=project_type_id,
         capabilities=selected_cap_ids,
         stack_bundle_id=bundle_id,
+        team_pack_id=team_pack_id,
+        specialist_ids=specialist_ids,
         description="",
     )
     state = build_initial_state(
@@ -1925,10 +1988,11 @@ def main():
             "runtime_representations": orca_provider_info,
         })
 
-    lock = build_resources_lock(
+    lock = build_resources_lock_with_hashes(
         bundle_id,
+        resource_selection,
+        resource_root,
         requested_bundle_id=bundle_id,
-        resources=lock_resources
     )
 
     # Step 5: Runtime selection
@@ -2106,6 +2170,22 @@ def main():
         print(cli_ui.success(f"Orca: {orca_result.get('message', 'available')}"))
     elif orca_result.get("message"):
         print(cli_ui.info(f"Orca: {orca_result['message']}"))
+    print()
+
+    # Apply new runtime adapters (Codex, OpenCode, Claude, Cursor)
+    # These generate config from .ai-workspace/ + project.yaml
+    try:
+        from core.runtime_adapters import apply_all_adapters, list_adapters
+        adapter_results = apply_all_adapters(full_project_path, force=False)
+        for adapter_name, written_paths in adapter_results.items():
+            if written_paths:
+                print(cli_ui.success(f"Runtime adapter '{adapter_name}': {len(written_paths)} files generated"))
+            else:
+                print(cli_ui.info(f"Runtime adapter '{adapter_name}': skipped (no config dir created)"))
+    except ImportError:
+        pass  # runtime_adapters not available
+    except Exception as e:
+        print(cli_ui.warning(f"Runtime adapters: {e}"))
     print()
 
     if runtime_id != "portable" and not runtime_ok:
@@ -2418,8 +2498,21 @@ def _snapshot_canonical(project_root: Path) -> dict:
 
 
 def _parse_cli_args(argv: list[str]) -> dict:
-    """Parse top-level CLI flags: --stats, --switch-runtime, --project, --no-color."""
-    result = {"stats": False, "switch_runtime": None, "project": None, "no_color": False}
+    """Parse top-level CLI flags: --stats, --switch-runtime, --project, --no-color, --deploy-agents, --list-agents."""
+    result = {
+        "stats": False,
+        "switch_runtime": None,
+        "project": None,
+        "no_color": False,
+        "deploy_agents": False,
+        "list_agents": False,
+        "agent_task": None,
+        "sync_upstream": False,
+        "check_updates": False,
+        "verify_lock": False,
+        "init_upstream": False,
+        "validate_schema": False,
+    }
     i = 1
     while i < len(argv):
         arg = argv[i]
@@ -2435,6 +2528,24 @@ def _parse_cli_args(argv: list[str]) -> dict:
             i += 1
             if i < len(argv):
                 result["project"] = argv[i]
+        elif arg == "--deploy-agents":
+            result["deploy_agents"] = True
+        elif arg == "--list-agents":
+            result["list_agents"] = True
+        elif arg == "--agent-task":
+            i += 1
+            if i < len(argv):
+                result["agent_task"] = argv[i]
+        elif arg == "--sync-upstream":
+            result["sync_upstream"] = True
+        elif arg == "--check-updates":
+            result["check_updates"] = True
+        elif arg == "--verify-lock":
+            result["verify_lock"] = True
+        elif arg == "--init-upstream":
+            result["init_upstream"] = True
+        elif arg == "--validate-schema":
+            result["validate_schema"] = True
         i += 1
     return result
 
@@ -2459,6 +2570,78 @@ if __name__ == "__main__":
             sys.exit(2)
         ok = switch_runtime(args["project"], args["switch_runtime"])
         sys.exit(0 if ok else 1)
+
+    if args["list_agents"]:
+        if not args["project"]:
+            cli_ui.error("--list-agents requires --project <path>")
+            sys.exit(2)
+        from core.agent_manager_bridge import create_bridge
+        bridge = create_bridge(args["project"])
+        info = bridge.list_specialists()
+        print(f"\nProject: {bridge.spec.name} ({bridge.spec.id})")
+        print(f"Type: {bridge.spec.project_type}")
+        print(f"Team Pack: {bridge.spec.team_pack}")
+        print(f"\nCore Team ({len(info['core_team'])}):")
+        for a in info['core_team']:
+            print(f"  - {a['id']} ({a['division']}) [{a['activation']}]: {a['description']}")
+        print(f"\nSpecialists ({len(info['specialists'])}):")
+        for a in info['specialists']:
+            print(f"  - {a['id']} ({a['division']}) [{a['activation']}]: {a['description']}")
+        print(f"\nAvailable Packs: {', '.join(info['available_packs'])}")
+        sys.exit(0)
+
+    if args["deploy_agents"]:
+        if not args["project"]:
+            cli_ui.error("--deploy-agents requires --project <path>")
+            sys.exit(2)
+        from core.agent_manager_bridge import create_bridge
+        bridge = create_bridge(args["project"])
+        if not bridge.check_agent_manager_available():
+            cli_ui.error("Agent Manager (origin CLI) not available. Install from https://origin.cursor.com")
+            sys.exit(1)
+        task = args["agent_task"] or "Execute team pack mission"
+        deployment = bridge.deploy_team_pack(task)
+        print(f"\nDeployed team pack '{deployment.team_pack}' for project '{deployment.project_id}'")
+        print(f"Core agents: {len(deployment.core_agents)}")
+        print(f"Specialist agents: {len(deployment.specialist_agents)}")
+        if deployment.errors:
+            print(f"Errors: {deployment.errors}")
+        sys.exit(0)
+
+    if args["sync_upstream"]:
+        if not args["project"]:
+            cli_ui.error("--sync-upstream requires --project <path>")
+            sys.exit(2)
+        from core.resource_lock import cmd_sync
+        sys.exit(cmd_sync(args["project"]))
+
+    if args["check_updates"]:
+        if not args["project"]:
+            cli_ui.error("--check-updates requires --project <path>")
+            sys.exit(2)
+        from core.resource_lock import cmd_check_updates
+        sys.exit(cmd_check_updates(args["project"]))
+
+    if args["verify_lock"]:
+        if not args["project"]:
+            cli_ui.error("--verify-lock requires --project <path>")
+            sys.exit(2)
+        from core.resource_lock import cmd_verify_lock
+        sys.exit(cmd_verify_lock(args["project"]))
+
+    if args["init_upstream"]:
+        if not args["project"]:
+            cli_ui.error("--init-upstream requires --project <path>")
+            sys.exit(2)
+        from core.resource_lock import cmd_init_upstream
+        sys.exit(cmd_init_upstream(args["project"]))
+
+    if args["validate_schema"]:
+        if not args["project"]:
+            cli_ui.error("--validate-schema requires --project <path>")
+            sys.exit(2)
+        from core.schema_validator import cmd_validate_schema
+        sys.exit(cmd_validate_schema(args["project"]))
 
     try:
         main()

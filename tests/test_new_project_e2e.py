@@ -68,6 +68,7 @@ def _make_inputs(project_name, project_path, type_id, confirm, runtime="portable
         _type_position(type_id), # project type
         "",                      # capabilities (defaults)
         "",                      # stack bundle (first recommendation)
+        "1",                     # team pack (first recommendation)
         RUNTIME_POS[runtime],    # runtime adapter
         confirm,                 # confirm generation (y/n)
     ]
@@ -237,6 +238,7 @@ class TestNewProjectE2E(unittest.TestCase):
             type_pos,                     # project type
             "",                           # capabilities (defaults)
             "",                           # stack bundle (first)
+            "1",                          # team pack (first)
             "1",                          # runtime = portable
             "n",                          # confirm -> cancel
         ])

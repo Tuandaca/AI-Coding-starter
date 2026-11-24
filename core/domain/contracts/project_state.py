@@ -56,6 +56,8 @@ class ProjectSpec:
     project_type: Optional[CanonicalId] = None
     capabilities: List[CanonicalId] = field(default_factory=list)
     stack_bundle: Optional[CanonicalId] = None
+    team_pack: Optional[CanonicalId] = None
+    specialists: List[CanonicalId] = field(default_factory=list)
     technology_overrides: Dict[str, CanonicalId] = field(default_factory=dict)
     runtime_preferences: RuntimePreferences = field(default_factory=RuntimePreferences)
     provider_preferences: Dict[str, CanonicalId] = field(default_factory=dict)
@@ -108,6 +110,8 @@ class ProjectSpec:
             project_type=make_id(project_data["project_type"]) if project_data.get("project_type") else None,
             capabilities=[make_id(c) for c in project_data.get("capabilities", [])],
             stack_bundle=make_id(project_data["stack_bundle"]) if project_data.get("stack_bundle") else None,
+            team_pack=make_id(project_data["team_pack"]) if project_data.get("team_pack") else None,
+            specialists=[make_id(s) for s in project_data.get("specialists", [])],
             technology_overrides={
                 k: make_id(v) for k, v in project_data.get("technology_overrides", {}).items()
             },
@@ -129,6 +133,8 @@ class ProjectSpec:
                 "project_type": str(self.project_type) if self.project_type else None,
                 "capabilities": [str(c) for c in self.capabilities],
                 "stack_bundle": str(self.stack_bundle) if self.stack_bundle else None,
+                "team_pack": str(self.team_pack) if self.team_pack else None,
+                "specialists": [str(s) for s in self.specialists],
                 "technology_overrides": {k: str(v) for k, v in self.technology_overrides.items()},
                 "runtime_preferences": self.runtime_preferences.to_dict(),
                 "provider_preferences": {k: str(v) for k, v in self.provider_preferences.items()}

@@ -278,6 +278,8 @@ class LockedResource:
     provenance: Provenance
     runtime_representations: dict = field(default_factory=dict)
     selection_reason: Optional[str] = None
+    content_hash: str = ""
+    size_bytes: int = 0
 
 
 @dataclass(frozen=True)
@@ -337,6 +339,10 @@ class ResourcesLock:
                        if r.runtime_representations else {}),
                     **({"selection_reason": r.selection_reason}
                        if r.selection_reason else {}),
+                    **({"content_hash": r.content_hash}
+                       if r.content_hash else {}),
+                    **({"size_bytes": r.size_bytes}
+                       if r.size_bytes else {}),
                 }
                 for r in self.resources
             ],
@@ -376,6 +382,8 @@ class ResourcesLock:
                 ),
                 runtime_representations=r.get("runtime_representations", {}),
                 selection_reason=r.get("selection_reason"),
+                content_hash=r.get("content_hash", ""),
+                size_bytes=r.get("size_bytes", 0),
             ))
         sbr = None
         if data.get("stack_bundle_resolution") is not None:
@@ -498,6 +506,8 @@ def build_resources_lock(
                         "runtime_representations", {}
                     ),
                     selection_reason=entry.get("selection_reason"),
+                    content_hash=entry.get("content_hash", ""),
+                    size_bytes=entry.get("size_bytes", 0),
                 )
             )
     return ResourcesLock(

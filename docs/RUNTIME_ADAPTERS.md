@@ -1,0 +1,281 @@
+# Runtime Adapters
+
+## Overview
+
+Runtime adapters derive vendor-specific configuration from the portable AI workspace (`.ai-workspace/`) and canonical state (`.ai-coding-starter/project.yaml`). They are **stateless**, **idempotent**, and **one-way**: canonical state → runtime config.
+
+```
+.ai-coding-starter/project.yaml (canonical)
+.ai-workspace/ (portable resources)
+       │
+       ▼
+┌─────────────────────────────────────────────┐
+│ Runtime Adapters                            │
+├─────────────┬─────────────┬─────────────────┤
+│ Codex       │ OpenCode    │ Claude Code     │
+│ .codex/     │ .opencode/  │ .claude/        │
+└─────────────┴─────────────┴─────────────────┘
+       │
+       ▼
+.cursor/ (Cursor rules)
+```
+
+## Architecture
+
+### Base Class: `RuntimeAdapter`
+
+All adapters inherit from `core.runtime_adapters.RuntimeAdapter`:
+
+```python
+class RuntimeAdapter(ABC):
+    @property
+    @abstractmethod
+    def runtime_name(self) -> str: ...
+
+    @property
+    @abstractmethod
+    def config_dir_name(self) -> str: ...
+
+    def read_canonical_state(self) -> tuple[ProjectSpec, ProjectState, ResourcesLock]: ...
+
+    def read_portable_workspace(self) -> dict[str, list[Path]]: ...
+
+    @abstractmethod
+    def generate_config(self, spec, state, lock, workspace) -> dict[Path, str]: ...
+
+    def apply(self, force: bool = False) -> list[Path]: ...
+```
+
+### Adapter Registry
+
+```python
+from core.runtime_adapters import ADAPTERS, get_adapter, apply_all_adapters
+
+# List available
+print(ADAPTERS.keys())  # ['codex', 'opencode', 'claude', 'cursor']
+
+# Get single adapter
+adapter = get_adapter("codex", project_root)
+written = adapter.apply()
+
+# Apply all
+results = apply_all_adapters(project_root)
+# {'codex': [...], 'opencode': [...], 'claude': [...], 'cursor': [...]}
+```
+
+## Adapter Details
+
+### Codex (`.codex/`)
+
+**Config file**: `.codex/config.toml`
+
+```toml
+# Codex Configuration
+# Generated from my-project (my-project)
+# Project Type: saas
+# Stack Bundle: nextjs-dotnet-postgres
+# Team Pack: startup-mvp
+
+[project]
+name = "my-project"
+id = "my-project"
+project_type = "saas"
+stack_bundle = "nextjs-dotnet-postgres"
+team_pack = "startup-mvp"
+specialists = ["engineering-backend-architect", "engineering-devops-automator"]
+capabilities = ["email", "search"]
+
+[runtime]
+mode = "local"
+project_local_only = true
+
+[agents]
+auto_load = true
+
+[skills]
+auto_load = true
+
+[workflows]
+auto_load = true
+```
+
+**Project metadata**: `.codex/project.json`
+
+```json
+{
+  "name": "my-project",
+  "id": "my-project",
+  "project_type": "saas",
+  "stack_bundle": "nextjs-dotnet-postgres",
+  "team_pack": "startup-mvp",
+  "specialists": ["engineering-backend-architect", "engineering-devops-automator"],
+  "capabilities": ["email", "search"],
+  "runtime_preferences": {
+    "project_local_only": true
+  }
+}
+```
+
+**Resources synced from `.ai-workspace/`:**
+- `.codex/agents/*.md` — Agent definitions
+- `.codex/skills/*/SKILL.md` — Skill definitions
+- `.codex/workflows/*.md` — Workflow definitions
+- `.codex/rules/*.md` — Rule files
+- `.codex/scripts/*.py` — Executable scripts
+- `.codex/shared/**` — Shared modules
+
+### OpenCode (`.opencode/`)
+
+**Config file**: `.opencode/config.json`
+
+```json
+{
+  "name": "my-project",
+  "projectType": "saas",
+  "stackBundle": "nextjs-dotnet-postgres",
+  "teamPack": "startup-mvp",
+  "specialists": ["engineering-backend-architect", "engineering-devops-automator"],
+  "capabilities": ["email", "search"],
+  "version": "1.0.0"
+}
+```
+
+**Resources:**
+- `.opencode/agents/*.md` — Agent definitions
+- `.opencode/skills/*/SKILL.md` — Skill definitions
+- `.opencode/commands/*.md` — Custom commands (from workflows + scripts)
+- `.opencode/rules/*.md` — Rule files
+- `.opencode/shared/**` — Shared modules
+
+**Commands** are auto-generated from workflows and scripts with frontmatter:
+```markdown
+---
+name: deploy
+description: Workflow converted from .ai-workspace/workflows/deploy.md
+---
+
+# Deploy Workflow
+...
+```
+
+### Claude Code (`.claude/`)
+
+**Config file**: `.claude/settings.json`
+
+```json
+{
+  "projectName": "my-project",
+  "projectType": "saas",
+  "stackBundle": "nextjs-dotnet-postgres",
+  "teamPack": "startup-mvp",
+  "specialists": ["engineering-backend-architect", "engineering-devops-automator"],
+  "capabilities": ["email", "search"]
+}
+```
+
+**Resources:**
+- `.claude/agents/*.md` — Agent definitions
+- `.claude/commands/*.md` — Slash commands (from workflows + scripts)
+- `.claude/rules/*.md` — Rule files
+
+### Cursor (`.cursor/`)
+
+**Config file**: `.cursor/mcp.json` (placeholder for MCP servers)
+
+```json
+{
+  "mcpServers": {}
+}
+```
+
+**Rules** (`.cursor/rules/*.mdc`):
+- From `.ai-workspace/rules/` → `{name}.mdc`
+- From `.ai-workspace/agents/` → `agent-{name}.mdc`
+
+```markdown
+---
+description: Agent engineering-backend-architect from .ai-workspace/agents/
+globs: []
+alwaysApply: false
+---
+
+# engineering-backend-architect
+...
+```
+
+## Usage
+
+### Automatic (during project creation)
+
+Runtime adapters are automatically applied after project generation in `new_project.py`:
+
+```python
+# After writing canonical state and portable workspace
+from core.runtime_adapters import apply_all_adapters
+adapter_results = apply_all_adapters(full_project_path, force=False)
+for adapter_name, written_paths in adapter_results.items():
+    print(f"{adapter_name}: {len(written_paths)} files")
+```
+
+### Manual (existing project)
+
+```bash
+# Apply all adapters to existing project
+python -c "
+from core.runtime_adapters import apply_all_adapters
+results = apply_all_adapters('/path/to/project')
+for name, paths in results.items():
+    print(f'{name}: {len(paths)} files')
+"
+```
+
+### Programmatic
+
+```python
+from core.runtime_adapters import get_adapter
+
+# Single adapter
+adapter = get_adapter("codex", project_root)
+written = adapter.apply(force=True)  # overwrite existing
+
+# Clean up
+adapter.clean()  # removes .codex/
+```
+
+## Extending Adapters
+
+To add a new runtime adapter:
+
+1. Create a new class inheriting from `RuntimeAdapter`
+2. Implement `runtime_name`, `config_dir_name`, and `generate_config()`
+3. Register in `ADAPTERS` dict
+
+```python
+from core.runtime_adapters import RuntimeAdapter, ADAPTERS
+
+class MyCustomAdapter(RuntimeAdapter):
+    @property
+    def runtime_name(self) -> str:
+        return "mycustom"
+
+    @property
+    def config_dir_name(self) -> str:
+        return ".mycustom"
+
+    def generate_config(self, spec, state, lock, workspace):
+        # Return {Path: content} dict
+        return {
+            Path("config.yaml"): f"project: {spec.name}\n...",
+        }
+
+# Register
+ADAPTERS["mycustom"] = MyCustomAdapter
+```
+
+## Design Principles
+
+1. **One-way derivation**: Markdown/portable workspace → runtime config. Never the reverse.
+2. **Idempotent**: Running `apply()` multiple times produces identical output.
+3. **Fail-open**: If a resource type has no files, adapter continues without error.
+4. **No network**: All generation uses local `.ai-workspace/` only.
+5. **Canonical wins**: `project.yaml` is the single source of truth.

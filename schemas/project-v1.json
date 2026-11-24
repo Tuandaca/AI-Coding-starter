@@ -1,0 +1,153 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-coding-starter.dev/schemas/project-v1.json",
+  "title": "AI-Coding-Starter Project Specification",
+  "type": "object",
+  "required": ["schema_version", "project"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Schema version for forward compatibility"
+    },
+    "project": {
+      "type": "object",
+      "required": ["id", "name", "created_at", "updated_at"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Canonical project ID (kebab-case)"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Human-readable project name"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500,
+          "default": "",
+          "description": "Project description"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 creation timestamp"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 last update timestamp"
+        },
+        "project_type": {
+          "type": ["string", "null"],
+          "enum": [
+            "saas",
+            "portfolio",
+            "blog",
+            "docs",
+            "landing-page",
+            "mobile-app",
+            "desktop-app",
+            "ai-rag",
+            "fintech",
+            "healthtech",
+            "ecommerce",
+            "devops-platform",
+            "business-website",
+            "fullstack-api"
+          ],
+          "description": "Project type identifier"
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]+$"
+          },
+          "uniqueItems": true,
+          "default": [],
+          "description": "Selected capability IDs"
+        },
+        "stack_bundle": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z0-9-]+$",
+          "description": "Resolved stack bundle ID"
+        },
+        "team_pack": {
+          "type": ["string", "null"],
+          "enum": [
+            "startup-mvp",
+            "production-feature",
+            "bug-fix",
+            "refactor",
+            "security-audit",
+            "performance-investigation",
+            "incident-fix"
+          ],
+          "description": "Active team pack"
+        },
+        "specialists": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]+$"
+          },
+          "uniqueItems": true,
+          "default": [],
+          "description": "Active specialist agent IDs"
+        },
+        "technology_overrides": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[a-z0-9.-]+$"
+          },
+          "default": {},
+          "description": "Technology overrides per role"
+        },
+        "runtime_preferences": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "primary": {
+              "type": ["string", "null"],
+              "enum": ["portable", "codex", "opencode", "antigravity", "claude-code", "cursor"]
+            },
+            "fallbacks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["portable", "codex", "opencode", "antigravity", "claude-code", "cursor"]
+              }
+            },
+            "project_local_only": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          "default": {
+            "primary": null,
+            "fallbacks": [],
+            "project_local_only": true
+          }
+        },
+        "provider_preferences": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]+$"
+          },
+          "default": {},
+          "description": "Capability provider preferences"
+        }
+      }
+    }
+  }
+}

@@ -63,6 +63,8 @@ def build_project_spec(
     project_type_id: Optional[str] = None,
     capabilities: Optional[list[str]] = None,
     stack_bundle_id: Optional[str] = None,
+    team_pack_id: Optional[str] = None,
+    specialist_ids: Optional[list[str]] = None,
     description: str = "",
 ) -> ProjectSpec:
     """Build a machine-authoritative :class:`ProjectSpec` from M3 selection state.
@@ -80,6 +82,8 @@ def build_project_spec(
         project_type=make_id(project_type_id) if project_type_id else None,
         capabilities=[make_id(c) for c in (capabilities or [])],
         stack_bundle=make_id(stack_bundle_id) if stack_bundle_id else None,
+        team_pack=make_id(team_pack_id) if team_pack_id else None,
+        specialists=[make_id(s) for s in (specialist_ids or [])],
     )
 
 

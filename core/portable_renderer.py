@@ -86,6 +86,10 @@ def render_agents_md(
         lines.append(f"- **Stack Bundle**: {spec.stack_bundle}")
     else:
         lines.append("- **Stack Bundle**: None")
+    if spec.team_pack:
+        lines.append(f"- **Team Pack**: {spec.team_pack}")
+    if spec.specialists:
+        lines.append(f"- **Specialists**: {', '.join(str(s) for s in spec.specialists)}")
     lines += [
         "",
         "## Portable AI Workspace",
@@ -149,6 +153,8 @@ def render_context_md(spec: ProjectSpec, state: ProjectState) -> str:
         f"- **Project Type**: {spec.project_type or '(not set)'}",
         f"- **Capabilities**: {', '.join(str(c) for c in spec.capabilities) if spec.capabilities else 'None'}",
         f"- **Stack Bundle**: {spec.stack_bundle or '(not set)'}",
+        f"- **Team Pack**: {spec.team_pack or '(not set)'}",
+        f"- **Specialists**: {', '.join(str(s) for s in spec.specialists) if spec.specialists else 'None'}",
         f"- **Created**: {spec.created_at}",
         f"- **Updated**: {spec.updated_at}",
         "",
@@ -212,6 +218,8 @@ def render_handoff_md(
         f"- **ID**: {spec.id}",
         f"- **Project Type**: {spec.project_type or 'not set'}",
         f"- **Selected Stack**: {spec.stack_bundle or 'not set'}",
+        f"- **Team Pack**: {spec.team_pack or 'not set'}",
+        f"- **Specialists**: {', '.join(str(s) for s in spec.specialists) if spec.specialists else 'None'}",
         f"- **Capabilities**: {', '.join(str(c) for c in spec.capabilities) if spec.capabilities else 'None'}",
         "",
         "## Current Phase",
