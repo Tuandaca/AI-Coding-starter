@@ -50,6 +50,7 @@ from core.state import (
 from core.portable_renderer import render_all, render_portable_workspace  # noqa: E402
 from core.stack_scaffold import scaffold_stack, write_gitignore, write_project_readme  # noqa: E402
 from core.cbm_integration import maybe_initialize_cbm  # noqa: E402
+from core.agent_reach_integration import maybe_initialize_agent_reach, get_agent_reach_provider_info  # noqa: E402
 from core import cli_ui  # noqa: E402
 
 # generic-renderer.py has a hyphen in its file name, so use importlib.
@@ -1883,6 +1884,26 @@ def main():
             "runtime_representations": cbm_provider_info,
         })
 
+    # M10: Check Agent-Reach availability for optional provider entry in resources.lock
+    agent_reach_provider_info = get_agent_reach_provider_info()
+
+    # Add Agent-Reach as optional capability provider if available
+    if agent_reach_provider_info:
+        lock_resources.append({
+            "id": "agent-reach",
+            "type": "capability-provider",
+            "version": "1.0.0",
+            "provenance": {
+                "source": "agent-reach",
+                "commit_sha": "main",
+                "license": "MIT",
+                "reviewed_date": "2026-11-24",
+                "transformation": "none",
+            },
+            "selection_reason": "capability:research-web (optional provider)",
+            "runtime_representations": agent_reach_provider_info,
+        })
+
     lock = build_resources_lock(
         bundle_id,
         requested_bundle_id=bundle_id,
@@ -2048,6 +2069,14 @@ def main():
         # (This is optional and non-blocking)
     elif cbm_result.get("message"):
         print(cli_ui.info(f"Codebase Memory: {cbm_result['message']}"))
+    print()
+
+    # M10: Optional Agent-Reach integration (fail-open)
+    agent_reach_result = maybe_initialize_agent_reach(full_project_path, interactive=False)
+    if agent_reach_result.get("initialized"):
+        print(cli_ui.success(f"Agent-Reach: {agent_reach_result.get('message', 'available')}"))
+    elif agent_reach_result.get("message"):
+        print(cli_ui.info(f"Agent-Reach: {agent_reach_result['message']}"))
     print()
 
     if runtime_id != "portable" and not runtime_ok:
