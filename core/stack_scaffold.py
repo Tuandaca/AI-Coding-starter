@@ -2216,8 +2216,8 @@ from ...schemas.document import (
     DocumentSearch,
     DocumentSearchResult,
 )
-from .embedding import EmbeddingService
-from .vector_search import vector_search
+from ...services.embedding import EmbeddingService
+from ...services.vector_search import vector_search
 
 router = APIRouter()
 
@@ -2375,8 +2375,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import settings
 from ..schemas.document import ChatResponse, DocumentSearchResult
-from .embedding import EmbeddingService
-from .vector_search import vector_search
+from ...services.embedding import EmbeddingService
+from ...services.vector_search import vector_search
 
 try:
     from langchain_core.messages import HumanMessage, SystemMessage
