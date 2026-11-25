@@ -48,7 +48,7 @@ def log_error(message, error=None):
             f.write(f"[{timestamp}] {message}\n")
             if error:
                 f.write(f"  Error: {type(error).__name__}: {error}\n")
-    except:
+    except Exception:
         pass  # Silently fail - logging should never break the app
 
 def load_analytics():
@@ -100,7 +100,7 @@ def load_analytics():
         if path.exists():
             import shutil
             shutil.copy(path, backup_path)
-    except:
+    except Exception:
         pass
     
     return {"projects": [], "version": "1.0"}
@@ -139,7 +139,7 @@ def save_analytics(data):
         try:
             if temp_path.exists():
                 temp_path.unlink()
-        except:
+        except Exception:
             pass
         return False
 
@@ -216,7 +216,7 @@ def validate_context_content(content):
         ratio = printable / len(content) if content else 0
         if ratio < 0.9:
             issues.append(f"Too many non-printable chars ({ratio:.0%} printable)")
-    except:
+    except Exception:
         issues.append("Could not validate content characters")
     
     return (len(issues) == 0, issues)
