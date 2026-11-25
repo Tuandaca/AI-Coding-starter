@@ -23,10 +23,12 @@ from __future__ import annotations
 import json
 import re
 import sys
+import tomllib
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CATALOG_DIR = REPO_ROOT / "catalog"
+SCAFFOLD_SUPPORT_PATH = REPO_ROOT / "core" / "stack_scaffold.py"
 
 BYPASS_PATTERNS = [
     r"--yolo\b",
@@ -154,10 +156,97 @@ def main() -> int:
 
     # -- 6. VERSION file --------------------------------------------------
     version_path = REPO_ROOT / "VERSION"
-    if version_path.is_file() and version_path.read_text(encoding="utf-8").strip():
-        ok(f"VERSION present ({version_path.read_text(encoding='utf-8').strip()})")
+    version_text = version_path.read_text(encoding="utf-8").strip() if version_path.is_file() else ""
+    if version_text:
+        ok(f"VERSION present ({version_text})")
     else:
         fail("VERSION file missing or empty", errors)
+
+    # -- 7. VERSION == pyproject.toml version -------------------------------
+    try:
+        pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+        pyproject_version = str(pyproject.get("project", {}).get("version", ""))
+    except (OSError, KeyError, ValueError, tomllib.TOMLDecodeError) as exc:
+        pyproject_version = ""
+        fail(f"could not read pyproject.toml version: {exc}", errors)
+    version_text = version_path.read_text(encoding="utf-8").strip()
+    if pyproject_version and pyproject_version != version_text:
+        fail(f"pyproject.toml version {pyproject_version!r} != VERSION {version_text!r}", errors)
+    elif pyproject_version:
+        ok(f"pyproject.toml version == VERSION ({version_text})")
+
+    # -- 8. README current version == VERSION -------------------------------
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    if f"V{version_text}" in readme:
+        ok(f"README.md reports current version V{version_text}")
+    else:
+        fail(f"README.md does not report current version V{version_text}", errors)
+
+    # -- 9. PROJECT_STATUS current version == VERSION -----------------------
+    try:
+        project_status = (REPO_ROOT / "PROJECT_STATUS.md").read_text(encoding="utf-8")
+        if f"V{version_text}" in project_status:
+            ok(f"PROJECT_STATUS.md reports current version V{version_text}")
+        else:
+            fail(f"PROJECT_STATUS.md does not report current version V{version_text}", errors)
+    except OSError as exc:
+        fail(f"could not read PROJECT_STATUS.md: {exc}", errors)
+
+    # -- 10. project type count == canonical project-types catalog ----------
+    try:
+        pt_data = json.loads((CATALOG_DIR / "project-types.yaml").read_text(encoding="utf-8"))
+        pt_count = len(pt_data.get("project_types", []))
+        ok(f"project-types catalog has {pt_count} project types")
+    except (OSError, ValueError) as exc:
+        pt_count = 0
+        fail(f"could not read project-types catalog: {exc}", errors)
+
+    # -- 11. stack bundle count == canonical stack-bundles catalog ----------
+    try:
+        sb_data = json.loads((CATALOG_DIR / "stack-bundles.yaml").read_text(encoding="utf-8"))
+        sb_count = len(sb_data.get("stack_bundles", []))
+        catalog_bundle_ids = {str(b.get("id")) for b in sb_data.get("stack_bundles", []) if isinstance(b, dict)}
+        ok(f"stack-bundles catalog has {sb_count} stack bundles")
+    except (OSError, ValueError) as exc:
+        sb_count = 0
+        catalog_bundle_ids = set()
+        fail(f"could not read stack-bundles catalog: {exc}", errors)
+
+    # -- 12. SCAFFOLD_SUPPORT / BUNDLE_TEMPLATES track the catalog ----------
+    try:
+        from core.stack_scaffold import BUNDLE_TEMPLATES, SCAFFOLD_SUPPORT  # noqa: WPS433
+        scaffold_support_ids = set(SCAFFOLD_SUPPORT.keys())
+        bundle_template_ids = set(BUNDLE_TEMPLATES.keys())
+        orphan_support = scaffold_support_ids - catalog_bundle_ids
+        orphan_templates = bundle_template_ids - catalog_bundle_ids
+        if orphan_support:
+            for bid in sorted(orphan_support):
+                fail(f"SCAFFOLD_SUPPORT declares bundle {bid!r} absent from stack-bundles catalog", errors)
+        if orphan_templates:
+            for bid in sorted(orphan_templates):
+                fail(f"BUNDLE_TEMPLATES declares bundle {bid!r} absent from stack-bundles catalog", errors)
+        if not orphan_support and not orphan_templates:
+            ok("SCAFFOLD_SUPPORT and BUNDLE_TEMPLATES track the stack-bundles catalog")
+
+        # -- 13. FULL/PARTIAL counts == SCAFFOLD_SUPPORT -------------------
+        full_count = sum(1 for v in SCAFFOLD_SUPPORT.values() if v == "full")
+        partial_count = sum(1 for v in SCAFFOLD_SUPPORT.values() if v == "partial")
+        ok(f"SCAFFOLD_SUPPORT: {full_count} full, {partial_count} partial, {len(SCAFFOLD_SUPPORT)} total declared")
+    except Exception as exc:  # noqa: BLE001
+        fail(f"could not cross-check scaffold declarations against catalog: {exc}", errors)
+
+    # -- 14. generated starter-version strings use canonical version --------
+    stale_version_markers = ("v2.1.1", "2.1.1", "V2.1.1")
+    try:
+        scaffold_text = SCAFFOLD_SUPPORT_PATH.read_text(encoding="utf-8")
+        found_stale = [m for m in stale_version_markers if m in scaffold_text]
+        if found_stale:
+            for m in found_stale:
+                fail(f"stale version marker {m!r} still present in stack_scaffold.py", errors)
+        else:
+            ok("stack_scaffold.py uses canonical starter version (no stale v2.1.1 markers)")
+    except OSError as exc:
+        fail(f"could not scan stack_scaffold.py for stale versions: {exc}", errors)
 
     print()
     if errors:

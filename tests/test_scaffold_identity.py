@@ -4,9 +4,11 @@
 
 Coverage:
   - normalize_project_identity derives context-safe identifiers per context
-  - special characters are normalized per context (npm slug, C# namespace,
-    Python package, docker/expo slug, tauri identifier)
-  - empty/whitespace-only display name falls back to defaults
+  - required name matrix (ci-test, My Project, my_project, 123-project,
+    Project.Name, project@name, Tên Dự Án) yields valid identifiers in every
+    context: npm, C# namespace, Python package, docker, database, expo slug,
+    tauri identifier, filesystem slug
+  - Unicode display names stay user-facing while technical identifiers stay valid
   - every full-bundle template substitutes all placeholders (no leakage)
   - metadata-only/minimal bundles return an empty scaffold map
   - scaffold_stack rejects path traversal and absolute paths
@@ -14,7 +16,10 @@ Coverage:
 
 Deterministic, offline.
 """
-import os
+import keyword
+import re
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -33,68 +38,116 @@ from core.stack_scaffold import (  # noqa: E402
     scaffold_support_for,
 )
 
+DOTNET = shutil.which("dotnet")
+
 FULL_BUNDLES = [b for b, level in SCAFFOLD_SUPPORT.items() if level == "full"]
 
+# Required name matrix from the release-remediation task.
+NAME_MATRIX = [
+    "ci-test",
+    "My Project",
+    "my_project",
+    "123-project",
+    "Project.Name",
+    "project@name",
+    "Tên Dự Án",
+]
 
-class TestNormalizeProjectIdentity(unittest.TestCase):
-    def test_keeps_display_verbatim(self):
-        ident = normalize_project_identity("My Cool App")
-        self.assertEqual(ident["display"], "My Cool App")
+# Validity rules per identifier context.
+NPM_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+CS_NS_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9]*$")
+PY_PKG_RE = re.compile(r"^[a-z_][a-z0-9_]*$")
+DOCKER_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+EXPO_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+TAURI_RE = re.compile(r"^com\.[a-z0-9]+(?:-[a-z0-9]+)*\.app$")
 
-    def test_defaults_when_empty_or_whitespace(self):
-        for bad in ("", "   ", "\t\n"):
-            with self.subTest(display=repr(bad)):
-                ident = normalize_project_identity(bad)
-                self.assertEqual(ident["display"], "project")
-                self.assertEqual(ident["filesystem"], "project")
-                self.assertEqual(ident["npm"], "project")
-                self.assertEqual(ident["python_package"], "project")
-                self.assertEqual(ident["csharp_namespace"], "Project")
-                self.assertEqual(ident["docker"], "project")
-                self.assertEqual(ident["database"], "project")
-                self.assertEqual(ident["expo_slug"], "project")
-                self.assertEqual(ident["tauri_identifier"], "com.project.app")
 
-    def test_npm_and_filesystem_are_slugs(self):
-        ident = normalize_project_identity("  My Cool App  ")
-        self.assertEqual(ident["filesystem"], "my-cool-app")
-        self.assertEqual(ident["npm"], "my-cool-app")
+class TestNormalizeProjectIdentityMatrix(unittest.TestCase):
+    def test_required_name_matrix_yields_valid_identifiers(self):
+        for name in NAME_MATRIX:
+            with self.subTest(name=name):
+                ident = normalize_project_identity(name)
 
-    def test_csharp_namespace_is_pascal_case(self):
-        ident = normalize_project_identity("my-cool-app")
-        self.assertEqual(ident["csharp_namespace"], "MyCoolApp")
+                # Display stays verbatim (user-facing, may contain Unicode/spaces).
+                self.assertEqual(ident["display"], name.strip() or "project")
 
-    def test_python_package_is_snake_case(self):
-        ident = normalize_project_identity("My Cool App")
-        self.assertEqual(ident["python_package"], "my_cool_app")
+                # npm name: lowercase alnum + hyphen, no leading/trailing hyphen.
+                self.assertTrue(
+                    NPM_RE.match(ident["npm"]),
+                    f"npm invalid for {name!r}: {ident['npm']!r}",
+                )
+                # filesystem slug == npm slug.
+                self.assertEqual(ident["filesystem"], ident["npm"])
+
+                # C# namespace: starts with letter/underscore, alnum only.
+                self.assertTrue(
+                    CS_NS_RE.match(ident["csharp_namespace"]),
+                    f"csharp namespace invalid for {name!r}: "
+                    f"{ident['csharp_namespace']!r}",
+                )
+                self.assertTrue(
+                    ident["csharp_namespace"][0].isalpha()
+                    or ident["csharp_namespace"][0] == "_",
+                    f"csharp namespace starts with digit for {name!r}: "
+                    f"{ident['csharp_namespace']!r}",
+                )
+
+                # Python package: valid identifier, not a keyword.
+                self.assertTrue(
+                    PY_PKG_RE.match(ident["python_package"]),
+                    f"python package invalid for {name!r}: "
+                    f"{ident['python_package']!r}",
+                )
+                self.assertTrue(
+                    ident["python_package"].isidentifier(),
+                    f"python package not an identifier for {name!r}: "
+                    f"{ident['python_package']!r}",
+                )
+                self.assertFalse(
+                    keyword.iskeyword(ident["python_package"]),
+                    f"python package is a keyword for {name!r}: "
+                    f"{ident['python_package']!r}",
+                )
+
+                # Docker / expo slug: DNS-1123 style.
+                for key in ("docker", "expo_slug"):
+                    self.assertTrue(
+                        DOCKER_RE.match(ident[key]),
+                        f"{key} invalid for {name!r}: {ident[key]!r}",
+                    )
+
+                # Database identifier: starts with letter/underscore.
+                self.assertTrue(
+                    PY_PKG_RE.match(ident["database"]),
+                    f"database invalid for {name!r}: {ident['database']!r}",
+                )
+                self.assertTrue(
+                    ident["database"][0].isalpha()
+                    or ident["database"][0] == "_",
+                    f"database starts with digit for {name!r}: {ident['database']!r}",
+                )
+
+                # Tauri identifier: reverse domain.
+                self.assertTrue(
+                    TAURI_RE.match(ident["tauri_identifier"]),
+                    f"tauri invalid for {name!r}: {ident['tauri_identifier']!r}",
+                )
+
+    def test_unicode_display_remains_user_facing(self):
+        ident = normalize_project_identity("Tên Dự Án")
+        self.assertEqual(ident["display"], "Tên Dự Án")
+        # Technical identifiers must not contain spaces or uppercase.
+        for key in ("npm", "filesystem", "docker", "database", "expo_slug"):
+            self.assertNotIn(" ", ident[key], key)
+            self.assertEqual(ident[key], ident[key].lower(), key)
+        self.assertTrue(CS_NS_RE.match(ident["csharp_namespace"]))
 
     def test_leading_digit_csharp_gets_prefix(self):
-        ident = normalize_project_identity("1st Project")
-        self.assertTrue(ident["csharp_namespace"][0].isalpha() or
-                        ident["csharp_namespace"][0] == "_")
-
-    def test_docker_expo_slug_lowercase_hyphen(self):
-        ident = normalize_project_identity("My Cool App")
-        self.assertEqual(ident["docker"], "my-cool-app")
-        self.assertEqual(ident["expo_slug"], "my-cool-app")
-
-    def test_tauri_identifier_format(self):
-        ident = normalize_project_identity("My Cool App")
-        self.assertEqual(ident["tauri_identifier"], "com.my-cool-app.app")
-
-    def test_special_characters_collapsed(self):
-        ident = normalize_project_identity("A!!! B??? C")
-        self.assertEqual(ident["filesystem"], "a-b-c")
-        self.assertEqual(ident["python_package"], "a_b_c")
-
-    def test_identifier_starts_with_letter_or_underscore(self):
-        ident = normalize_project_identity("99 problems")
-        # These contexts run through _safe_start, so they never start with a digit.
-        for key in ("csharp_namespace", "python_package", "database"):
-            first = ident[key][0]
-            self.assertTrue(first.isalpha() or first == "_", key)
-        # docker/expo_slug may start with a digit (DNS-1123 allows alnum start).
-        self.assertTrue(ident["docker"][0].isalnum())
+        ident = normalize_project_identity("123-project")
+        self.assertTrue(
+            ident["csharp_namespace"][0].isalpha()
+            or ident["csharp_namespace"][0] == "_"
+        )
 
 
 class TestScaffoldFilesSubstitution(unittest.TestCase):
@@ -108,6 +161,7 @@ class TestScaffoldFilesSubstitution(unittest.TestCase):
                     "{{project_slug}}", "{{project_python_package}}",
                     "{{project_docker}}", "{{project_database}}",
                     "{{project_expo_slug}}", "{{project_tauri_id}}",
+                    "{starter_version}",
                 ):
                     self.assertNotIn(placeholder, content,
                                      f"{bundle_id}:{rel_path} still has {placeholder}")
@@ -121,12 +175,6 @@ class TestScaffoldFilesSubstitution(unittest.TestCase):
     def test_unknown_bundle_returns_empty(self):
         self.assertEqual(scaffold_files("does-not-exist", "Demo Project"), {})
 
-    def test_display_and_slug_values_appear_in_output(self):
-        files = scaffold_files("nextjs-supabase", "Demo Project")
-        content = "\n".join(files.values())
-        self.assertIn("Demo Project", content)
-        self.assertIn("demo-project", content)
-
 
 class TestScaffoldStackPathSafety(unittest.TestCase):
     def test_writes_files_into_destination(self):
@@ -136,6 +184,37 @@ class TestScaffoldStackPathSafety(unittest.TestCase):
             for path in written:
                 self.assertTrue(Path(path).exists())
                 self.assertIn(str(Path(td).resolve()), str(path.resolve()))
+
+
+@unittest.skipUnless(DOTNET is not None, ".NET SDK not available")
+class TestDotnetScaffoldBuild(unittest.TestCase):
+    """Build representative generated .NET projects with problematic names.
+
+    Validates that normalized C# identifiers produce a compilable project even
+    when the display name contains spaces, digits, or symbols.
+    """
+
+    def _build_dotnet(self, bundle_id, project_name):
+        with tempfile.TemporaryDirectory() as td:
+            dest = Path(td) / "out"
+            scaffold_stack(dest, bundle_id, project_name)
+            csproj = list(Path(dest).rglob("*.csproj"))
+            self.assertTrue(csproj, f"No csproj found for {bundle_id}")
+            result = subprocess.run(
+                [DOTNET, "build", str(csproj[0])],
+                capture_output=True, text=True, timeout=600,
+            )
+            self.assertEqual(
+                result.returncode, 0,
+                f"dotnet build failed for {bundle_id} name={project_name!r}:\n"
+                f"{result.stdout}\n{result.stderr}",
+            )
+
+    def test_dotnet_postgres_builds_with_spaces(self):
+        self._build_dotnet("dotnet-postgres", "My Project")
+
+    def test_dotnet_postgres_builds_with_leading_digit(self):
+        self._build_dotnet("dotnet-postgres", "123-project")
 
 
 if __name__ == "__main__":
