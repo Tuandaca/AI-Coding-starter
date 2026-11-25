@@ -39,13 +39,18 @@ jobs:
       - name: Repository consistency and security checks
         run: python scripts/ci_consistency_check.py
 
-  fast-scaffolds:
+      - name: Run runtime isolation tests
+        run: python -m unittest tests.test_runtime_isolation -v
+
+      - name: Run runtime switching tests
+        run: python -m unittest tests.test_runtime_switching -v
+
+      - name: Run path escape tests
+        run: python -m unittest tests.test_runtime_path_escape -v
+
+  scaffolds:
     runs-on: ubuntu-latest
     needs: test
-    strategy:
-      fail-fast: false
-      matrix:
-        bundle: [react-static, fastapi-postgres, dotnet-postgres]
 
     steps:
       - name: Checkout repository
@@ -69,20 +74,29 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
-      - name: Generate scaffold ${{ matrix.bundle }}
-        run: BUNDLE="${{ matrix.bundle }}" python scripts/ci_generate_scaffold.py
+      - name: Validate all canonical FULL scaffolds
+        run: python scripts/ci_validate_scaffolds.py
 
-      - name: Build ${{ matrix.bundle }}
-        run: |
-          cd /tmp/scaffold-${{ matrix.bundle }}
-          if [ -f package.json ]; then
-            npm install
-            npm run build
-          elif [ -f server/*.csproj ]; then
-            dotnet restore server/*.csproj
-            dotnet build server/*.csproj --no-restore
-          elif [ -f requirements.txt ]; then
-            pip install -r requirements.txt 2>/dev/null || true
-            python -m compileall .
-            python -c "from src.main import app"
-          fi
+  scaffolds-windows:
+    runs-on: windows-latest
+    needs: test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: pip install -e .
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Validate .NET scaffold on Windows
+        run: python scripts/ci_validate_scaffolds.py --bundle dotnet-postgres

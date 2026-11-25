@@ -12,6 +12,7 @@ dependencies are installed automatically (installation is opt-in by the user).
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -21,7 +22,7 @@ from typing import Optional
 
 REACT_STATIC_FILES: dict[str, str] = {
     "package.json": '''{
-  "name": "{{project_name}}",
+  "name": "{{project_npm}}",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -180,7 +181,7 @@ export default {
 # other bundles resolve to an empty scaffold (no code generated).
 NEXTJS_SUPABASE_FILES: dict[str, str] = {
     "package.json": '''{
-  "name": "{{project_name}}",
+  "name": "{{project_npm}}",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -274,7 +275,7 @@ export default function RootLayout({
     </main>
   );
 }''',
-    "src/app/providers.tsx": '''use client
+    "src/app/providers.tsx": ''' "use client";
 
 import { createBrowserClient, isBrowser } from "@supabase/ssr";
 import React, { createContext, useContext, useEffect, useState } from "react";
@@ -290,7 +291,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (isBrowser()) {
-      setSupabase(createBrowserClient());
+      setSupabase(
+        createBrowserClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        ),
+      );
     }
   }, []);
 
@@ -316,25 +322,27 @@ export function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   );
 }''',
-    "src/lib/supabase/server.ts": '''import { createServerClient, type CookieOptions } from "@supabase/ssr";
+    "src/lib/supabase/server.ts": '''import { createServerClient, type CookieMethods } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
 export function createClient() {
   const cookieStore = cookies();
 
+  const cookieMethods = {
+    get(name: string) {
+      return cookieStore.get(name)?.value;
+    },
+  } as unknown as CookieMethods;
+
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-      } as Record<string, () => string | undefined>,
+      cookies: cookieMethods,
     },
   );
 }''',
-    "src/lib/supabase/middleware.ts": '''import { createServerClient, type CookieOptions } from "@supabase/ssr";
+    "src/lib/supabase/middleware.ts": '''import { createServerClient, type CookieMethods } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function updateSession(request: NextRequest) {
@@ -344,15 +352,17 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
+  const cookieMethods = {
+    get(name: string) {
+      return request.cookies.get(name)?.value;
+    },
+  } as unknown as CookieMethods;
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value;
-        },
-      } as Record<string, () => string | undefined>,
+      cookies: cookieMethods,
     },
   );
 
@@ -428,8 +438,9 @@ DOTNET_POSTGRES_FILES: dict[str, str] = {
   </ItemGroup>
 
 </Project>''',
-    "Program.cs": '''using {{project_name}}.Data;
-using {{project_name}}.Services;
+    "Program.cs": '''using Microsoft.EntityFrameworkCore;
+using {{project_namespace}}.Data;
+using {{project_namespace}}.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -493,7 +504,7 @@ app.Run();''',
   },
   "AllowedHosts": "*",
   "ConnectionStrings": {
-    "DefaultConnection": "Host=localhost;Port=5432;Database={{project_name}};Username=postgres;Password=postgres",
+    "DefaultConnection": "Host=localhost;Port=5432;Database={{project_database}};Username=postgres;Password=postgres",
     "Redis": "localhost:6379"
   }
 }''',
@@ -506,7 +517,7 @@ app.Run();''',
     }
   },
   "ConnectionStrings": {
-    "DefaultConnection": "Host=localhost;Port=5432;Database={{project_name}};Username=postgres;Password=postgres",
+    "DefaultConnection": "Host=localhost;Port=5432;Database={{project_database}};Username=postgres;Password=postgres",
     "Redis": "localhost:6379"
   }
 }''',
@@ -852,7 +863,7 @@ TestResults/
 
 # Local secret storage
 secrets/''',
-    "src/Models/User.cs": '''namespace {{project_name}}.Models;
+    "src/Models/User.cs": '''namespace {{project_namespace}}.Models;
 
 public class User
 {
@@ -864,9 +875,9 @@ public class User
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }''',
     "src/Data/AppDbContext.cs": '''using Microsoft.EntityFrameworkCore;
-using {{project_name}}.Models;
+using {{project_namespace}}.Models;
 
-namespace {{project_name}}.Data;
+namespace {{project_namespace}}.Data;
 
 public class AppDbContext : DbContext
 {
@@ -892,9 +903,9 @@ public class AppDbContext : DbContext
         });
     }
 }''',
-    "src/Services/IUserService.cs": '''using {{project_name}}.Models;
+    "src/Services/IUserService.cs": '''using {{project_namespace}}.Models;
 
-namespace {{project_name}}.Services;
+namespace {{project_namespace}}.Services;
 
 public interface IUserService
 {
@@ -906,10 +917,10 @@ public interface IUserService
     Task<User?> GetByEmailAsync(string email);
 }''',
     "src/Services/UserService.cs": '''using Microsoft.EntityFrameworkCore;
-using {{project_name}}.Data;
-using {{project_name}}.Models;
+using {{project_namespace}}.Data;
+using {{project_namespace}}.Models;
 
-namespace {{project_name}}.Services;
+namespace {{project_namespace}}.Services;
 
 public class UserService : IUserService
 {
@@ -975,10 +986,10 @@ public class UserService : IUserService
     }
 }''',
     "src/Controllers/UsersController.cs": '''using Microsoft.AspNetCore.Mvc;
-using {{project_name}}.Models;
-using {{project_name}}.Services;
+using {{project_namespace}}.Models;
+using {{project_namespace}}.Services;
 
-namespace {{project_name}}.Controllers;
+namespace {{project_namespace}}.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -1068,11 +1079,11 @@ public class UsersController : ControllerBase
     "docker-compose.yml": '''services:
   postgres:
     image: postgres:16-alpine
-    container_name: {{project_name}}_postgres
+    container_name: {{project_docker}}_postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: {{project_name}}
+      POSTGRES_DB: {{project_database}}
     ports:
       - "5432:5432"
     volumes:
@@ -1085,7 +1096,7 @@ public class UsersController : ControllerBase
 
   redis:
     image: redis:7-alpine
-    container_name: {{project_name}}_redis
+    container_name: {{project_docker}}_redis
     ports:
       - "6379:6379"
     volumes:
@@ -1102,16 +1113,16 @@ volumes:
     "Dockerfile": '''# syntax=docker/dockerfile:1
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
-COPY ["{{project_name}}.csproj", "./"]
-RUN dotnet restore "{{project_name}}.csproj"
+COPY ["App.csproj", "./"]
+RUN dotnet restore "App.csproj"
 COPY . .
-RUN dotnet publish "{{project_name}}.csproj" -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "App.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 WORKDIR /app
 EXPOSE 8080
 COPY --from=build /app/publish .
-ENTRYPOINT ["dotnet", "{{project_name}}.dll"]''',
+ENTRYPOINT ["dotnet", "App.dll"]''',
     "README.md": '''# {{project_name}}
 
 ASP.NET Core + PostgreSQL scaffold generated by AI-Coding-starter v2.1.1.
@@ -1170,7 +1181,7 @@ src/
 # FastAPI + PostgreSQL scaffold templates.
 FASTAPI_POSTGRES_FILES: dict[str, str] = {
     "pyproject.toml": '''[project]
-name = "{{project_name}}"
+name = "{{project_python_package}}"
 version = "0.1.0"
 description = "FastAPI + PostgreSQL scaffold generated by AI-Coding-starter v2.1.1"
 requires-python = ">=3.10"
@@ -1605,7 +1616,7 @@ formatter = generic
 format = %(levelname)-5.5s [%(name)s] %(message)s
 datefmt = %H:%M:%S
 ''',
-    "migrations/env.py": '''"""Alembic environment for {{project_name}}."""
+    "migrations/env.py": '''"""Alembic environment for {{project_namespace}}."""
 
 import asyncio
 from logging.config import fileConfig
@@ -1700,11 +1711,11 @@ def downgrade() -> None:
     "docker-compose.yml": '''services:
   postgres:
     image: postgres:16-alpine
-    container_name: {{project_name}}_postgres
+    container_name: {{project_docker}}_postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: {{project_name}}
+      POSTGRES_DB: {{project_database}}
     ports:
       - "5432:5432"
     volumes:
@@ -1717,7 +1728,7 @@ def downgrade() -> None:
 
   redis:
     image: redis:7-alpine
-    container_name: {{project_name}}_redis
+    container_name: {{project_docker}}_redis
     ports:
       - "6379:6379"
     volumes:
@@ -1826,7 +1837,7 @@ pytest
 # A specialization of fastapi-postgres adding pgvector, LangChain and OpenAI.
 AI_RAG_PYTHON_FILES: dict[str, str] = {
     "pyproject.toml": '''[project]
-name = "{{project_name}}"
+name = "{{project_python_package}}"
 version = "0.1.0"
 description = "FastAPI + PostgreSQL + pgvector RAG scaffold generated by AI-Coding-starter v2.1.1"
 requires-python = ">=3.10"
@@ -2216,8 +2227,8 @@ from ...schemas.document import (
     DocumentSearch,
     DocumentSearchResult,
 )
-from .embedding import EmbeddingService
-from .vector_search import vector_search
+from ...services.embedding import EmbeddingService
+from ...services.vector_search import vector_search
 
 router = APIRouter()
 
@@ -2472,7 +2483,7 @@ formatter = generic
 format = %(levelname)-5.5s [%(name)s] %(message)s
 datefmt = %H:%M:%S
 ''',
-    "migrations/env.py": '''"""Alembic environment for {{project_name}}."""
+    "migrations/env.py": '''"""Alembic environment for {{project_namespace}}."""
 
 import asyncio
 from logging.config import fileConfig
@@ -2567,11 +2578,11 @@ def downgrade() -> None:
     "docker-compose.yml": '''services:
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: {{project_name}}_postgres
+    container_name: {{project_docker}}_postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: {{project_name}}
+      POSTGRES_DB: {{project_database}}
     ports:
       - "5432:5432"
     volumes:
@@ -2584,7 +2595,7 @@ def downgrade() -> None:
 
   redis:
     image: redis:7-alpine
-    container_name: {{project_name}}_redis
+    container_name: {{project_docker}}_redis
     ports:
       - "6379:6379"
     volumes:
@@ -2722,7 +2733,7 @@ Dockerfile         # Multi-stage image
 # Expo + Supabase mobile (React Native + Expo + Supabase) scaffold templates.
 EXPO_SUPABASE_MOBILE_FILES: dict[str, str] = {
     "package.json": '''{
-  "name": "{{project_name}}",
+  "name": "{{project_npm}}",
   "version": "0.1.0",
   "private": true,
   "description": "Expo + Supabase mobile scaffold generated by AI-Coding-starter v2.1.1",
@@ -2776,8 +2787,8 @@ EXPO_SUPABASE_MOBILE_FILES: dict[str, str] = {
 }''',
     "app.json": '''{
   "expo": {
-    "name": "{{project_name}}",
-    "slug": "{{project_name}}",
+    "name": "{{project_npm}}",
+    "slug": "{{project_expo_slug}}",
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -2990,11 +3001,11 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key''',
     "docker-compose.yml": '''services:
   supabase-db:
     image: postgres:16-alpine
-    container_name: {{project_name}}_supabase_db
+    container_name: {{project_docker}}_supabase_db
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: {{project_name}}
+      POSTGRES_DB: {{project_database}}
     ports:
       - "54322:5432"
     volumes:
@@ -3060,7 +3071,7 @@ npx expo start
 # NestJS + PostgreSQL + Prisma scaffold templates.
 NESTJS_POSTGRES_FILES: dict[str, str] = {
     "package.json": '''{
-  "name": "{{project_name}}",
+  "name": "{{project_npm}}",
   "version": "0.1.0",
   "private": true,
   "description": "NestJS + PostgreSQL + Prisma scaffold generated by AI-Coding-starter v2.1.1",
@@ -3364,11 +3375,11 @@ API_PREFIX=api''',
     "docker-compose.yml": '''services:
   postgres:
     image: postgres:16-alpine
-    container_name: {{project_name}}_postgres
+    container_name: {{project_docker}}_postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: {{project_name}}
+      POSTGRES_DB: {{project_database}}
     ports:
       - "5432:5432"
     volumes:
@@ -3381,7 +3392,7 @@ API_PREFIX=api''',
 
   redis:
     image: redis:7-alpine
-    container_name: {{project_name}}_redis
+    container_name: {{project_docker}}_redis
     ports:
       - "6379:6379"
     volumes:
@@ -3485,7 +3496,7 @@ prisma/
 # React + Tauri + SQLite scaffold templates.
 TAURI_REACT_SQLITE_FILES: dict[str, str] = {
     "Cargo.toml": '''[package]
-name = "{{project_name}}"
+name = "{{project_python_package}}"
 version = "0.1.0"
 edition = "2021"
 
@@ -3501,7 +3512,7 @@ tokio = { version = "1", features = ["full"] }
 [build-dependencies]
 tauri-build = { version = "1.6" }''',
     "package.json": '''{
-  "name": "{{project_name}}",
+  "name": "{{project_npm}}",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -3585,7 +3596,7 @@ fn main() {
     "src-tauri/tauri.conf.json": '''{
   "productName": "{{project_name}}",
   "version": "0.1.0",
-  "identifier": "com.{{project_name}}.app",
+  "identifier": "{{project_tauri_id}}",
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
@@ -3794,7 +3805,7 @@ npm run tauri build
 # Next.js static on Vercel scaffold templates.
 NEXTJS_VERCEL_FILES: dict[str, str] = {
     "package.json": '''{
-  "name": "{{project_name}}",
+  "name": "{{project_npm}}",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -3977,7 +3988,7 @@ Connect your Git repository to Vercel and import the project. The static export 
 # Vue 3 + Vite static scaffold templates.
 VUE_LITE_FILES: dict[str, str] = {
     "package.json": '''{
-  "name": "{{project_name}}",
+  "name": "{{project_npm}}",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -3991,6 +4002,7 @@ VUE_LITE_FILES: dict[str, str] = {
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",
+    "vue-tsc": "^3.3.0",
     "autoprefixer": "^10.4.16",
     "postcss": "^8.4.31",
     "tailwindcss": "^3.3.5",
@@ -4044,7 +4056,7 @@ createApp(App).mount("#app");''',
 @tailwind utilities;''',
     "tailwind.config.js": '''/** @type {import('tailwindcss').Config} */
 export default {
-  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
+  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx,vue}"],
   theme: {
     extend: {},
   },
@@ -4138,8 +4150,9 @@ Output: `dist/` directory, ready for static hosting (Vercel, Netlify, etc.).
 # Next.js + ASP.NET Core + PostgreSQL scaffold templates.
 NEXTJS_DOTNET_POSTGRES_FILES: dict[str, str] = {
     "client/package.json": '''{
-  "name": "{{project_name}}",
+  "name": "{{project_npm}}",
   "private": true,
+  "type": "module",
   "version": "0.1.0",
   "scripts": {
     "dev": "next dev",
@@ -4229,7 +4242,7 @@ export default function RootLayout({
     </main>
   );
 }''',
-    "client/src/app/providers.tsx": '''use client
+    "client/src/app/providers.tsx": ''' "use client";
 
 import React, { createContext, useContext } from "react";
 
@@ -4300,7 +4313,7 @@ export default config;''',
     <ImplicitUsings>enable</ImplicitUsings>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
     <UserSecretsId>{{project_name}}</UserSecretsId>
-    <RootNamespace>{{project_name}}</RootNamespace>
+    <RootNamespace>{{project_namespace}}</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
@@ -4320,8 +4333,9 @@ export default config;''',
   </ItemGroup>
 
 </Project>''',
-    "server/Program.cs": '''using {{project_name}}.Data;
-using {{project_name}}.Services;
+    "server/Program.cs": '''using Microsoft.EntityFrameworkCore;
+using {{project_namespace}}.Data;
+using {{project_namespace}}.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -4385,7 +4399,7 @@ app.Run();''',
   },
   "AllowedHosts": "*",
   "ConnectionStrings": {
-    "DefaultConnection": "Host=postgres;Port=5432;Database={{project_name}};Username=postgres;Password=postgres",
+    "DefaultConnection": "Host=postgres;Port=5432;Database={{project_database}};Username=postgres;Password=postgres",
     "Redis": "redis:6379"
   }
 }''',
@@ -4398,11 +4412,11 @@ app.Run();''',
     }
   },
   "ConnectionStrings": {
-    "DefaultConnection": "Host=postgres;Port=5432;Database={{project_name}};Username=postgres;Password=postgres",
+    "DefaultConnection": "Host=postgres;Port=5432;Database={{project_database}};Username=postgres;Password=postgres",
     "Redis": "redis:6379"
   }
 }''',
-    "server/src/Models/User.cs": '''namespace {{project_name}}.Models;
+    "server/src/Models/User.cs": '''namespace {{project_namespace}}.Models;
 
 public class User
 {
@@ -4414,9 +4428,9 @@ public class User
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }''',
     "server/src/Data/AppDbContext.cs": '''using Microsoft.EntityFrameworkCore;
-using {{project_name}}.Models;
+using {{project_namespace}}.Models;
 
-namespace {{project_name}}.Data;
+namespace {{project_namespace}}.Data;
 
 public class AppDbContext : DbContext
 {
@@ -4442,9 +4456,9 @@ public class AppDbContext : DbContext
         });
     }
 }''',
-    "server/src/Services/IUserService.cs": '''using {{project_name}}.Models;
+    "server/src/Services/IUserService.cs": '''using {{project_namespace}}.Models;
 
-namespace {{project_name}}.Services;
+namespace {{project_namespace}}.Services;
 
 public interface IUserService
 {
@@ -4456,10 +4470,10 @@ public interface IUserService
     Task<User?> GetByEmailAsync(string email);
 }''',
     "server/src/Services/UserService.cs": '''using Microsoft.EntityFrameworkCore;
-using {{project_name}}.Data;
-using {{project_name}}.Models;
+using {{project_namespace}}.Data;
+using {{project_namespace}}.Models;
 
-namespace {{project_name}}.Services;
+namespace {{project_namespace}}.Services;
 
 public class UserService : IUserService
 {
@@ -4525,10 +4539,10 @@ public class UserService : IUserService
     }
 }''',
     "server/src/Controllers/UsersController.cs": '''using Microsoft.AspNetCore.Mvc;
-using {{project_name}}.Models;
-using {{project_name}}.Services;
+using {{project_namespace}}.Models;
+using {{project_namespace}}.Services;
 
-namespace {{project_name}}.Controllers;
+namespace {{project_namespace}}.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -4618,11 +4632,11 @@ public class UsersController : ControllerBase
     "docker-compose.yml": '''services:
   postgres:
     image: postgres:16-alpine
-    container_name: {{project_name}}_postgres
+    container_name: {{project_docker}}_postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: {{project_name}}
+      POSTGRES_DB: {{project_database}}
     ports:
       - "5432:5432"
     volumes:
@@ -4635,7 +4649,7 @@ public class UsersController : ControllerBase
 
   redis:
     image: redis:7-alpine
-    container_name: {{project_name}}_redis
+    container_name: {{project_docker}}_redis
     ports:
       - "6379:6379"
     volumes:
@@ -4650,7 +4664,7 @@ public class UsersController : ControllerBase
     build:
       context: ./server
       dockerfile: Dockerfile.server
-    container_name: {{project_name}}_server
+    container_name: {{project_docker}}_server
     depends_on:
       postgres:
         condition: service_healthy
@@ -4658,7 +4672,7 @@ public class UsersController : ControllerBase
         condition: service_healthy
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database={{project_name}};Username=postgres;Password=postgres
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database={{project_database}};Username=postgres;Password=postgres
       - ConnectionStrings__Redis=redis:6379
     ports:
       - "5000:8080"
@@ -4667,7 +4681,7 @@ public class UsersController : ControllerBase
     build:
       context: ./client
       dockerfile: Dockerfile.client
-    container_name: {{project_name}}_client
+    container_name: {{project_docker}}_client
     depends_on:
       - server
     environment:
@@ -4807,18 +4821,106 @@ def scaffold_support_for(bundle_id: str) -> str:
     return SCAFFOLD_SUPPORT.get(bundle_id, "metadata-only")
 
 
+# ---------------------------------------------------------------------------
+# Canonical project identity normalization
+# ---------------------------------------------------------------------------
+#
+# A single raw project display name is unsafe to reuse verbatim in every
+# generated identifier context: npm, C# namespaces, Python packages, Docker
+# container/database names, Expo slugs and Tauri identifiers all enforce
+# different rules.  This layer derives one safe value per context from the
+# user-supplied display name so generated projects compile and resolve
+# regardless of the characters the user chose.
+# ---------------------------------------------------------------------------
+
+def _word_chunks(raw: str) -> list[str]:
+    """Split a display name into alphanumeric word chunks (keeps unicode letters)."""
+    return [chunk for chunk in re.split(r"[^A-Za-z0-9]+", raw) if chunk]
+
+
+def _ascii_slug(raw: str) -> str:
+    """Lowercase identifier-safe slug using only a-z0-9 and hyphens."""
+    slug = re.sub(r"[^a-z0-9]+", "-", raw.lower()).strip("-")
+    return slug or "project"
+
+
+def _safe_start(value: str, prefix: str) -> str:
+    """Ensure an identifier starts with a letter or underscore."""
+    if not value:
+        return prefix
+    if value[0].isalpha() or value[0] == "_":
+        return value
+    return prefix + value
+
+
+def normalize_project_identity(display_name: str) -> dict[str, str]:
+    """Derive context-safe project identifiers from a user display name.
+
+    The ``display`` value is the user-facing name (kept verbatim for titles and
+    descriptions).  Every other value is normalized for a specific identifier
+    context so generated code compiles and package/resource names resolve.
+    """
+    raw = (display_name or "").strip() or "project"
+
+    chunks = _word_chunks(raw)
+    namespace = "".join(chunk[:1].upper() + chunk[1:] for chunk in chunks) if chunks else "Project"
+    namespace = _safe_start(namespace, "Project")
+
+    slug = _ascii_slug(raw)
+    python_pkg = re.sub(r"[^a-z0-9]+", "_", raw.lower()).strip("_")
+    python_pkg = _safe_start(python_pkg, "pkg")
+    database = re.sub(r"[^a-z0-9]+", "_", raw.lower()).strip("_")
+    database = _safe_start(database, "db")
+    docker = slug  # DNS-1123: lowercase alnum + hyphen, no leading/trailing hyphen
+    expo_slug = slug
+    tauri_id = f"com.{slug}.app"
+
+    return {
+        "display": raw,
+        "filesystem": slug,
+        "npm": slug,
+        "python_package": python_pkg,
+        "csharp_namespace": namespace,
+        "docker": docker,
+        "database": database,
+        "expo_slug": expo_slug,
+        "tauri_identifier": tauri_id,
+    }
+
+
+_PROJECT_IDENTITY_PLACEHOLDERS = (
+    ("{{project_name}}", "display"),
+    ("{{project_npm}}", "npm"),
+    ("{{project_namespace}}", "csharp_namespace"),
+    ("{{project_slug}}", "filesystem"),
+    ("{{project_python_package}}", "python_package"),
+    ("{{project_docker}}", "docker"),
+    ("{{project_database}}", "database"),
+    ("{{project_expo_slug}}", "expo_slug"),
+    ("{{project_tauri_id}}", "tauri_identifier"),
+)
+
+
 def scaffold_files(bundle_id: str, project_name: str) -> dict[str, str]:
-    """Return the scaffold file map for a bundle, with project name substituted.
+    """Return the scaffold file map for a bundle, with project identity substituted.
 
     Returns an empty map for bundles without a full scaffold
     (``metadata-only`` / ``minimal``).
+
+    ``project_name`` is the user-facing display name.  Each template placeholder
+    is replaced with the context-safe form derived by
+    :func:`normalize_project_identity` so no single raw name is forced into
+    incompatible identifier rules.
     """
     if scaffold_support_for(bundle_id) != "full":
         return {}
     templates = BUNDLE_TEMPLATES.get(bundle_id, {})
+    identity = normalize_project_identity(project_name)
     out: dict[str, str] = {}
     for rel_path, content in templates.items():
-        out[rel_path] = content.replace("{{project_name}}", project_name)
+        for placeholder, key in _PROJECT_IDENTITY_PLACEHOLDERS:
+            content = content.replace(placeholder, identity[key])
+        out[rel_path] = content
     return out
 
 

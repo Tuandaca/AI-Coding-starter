@@ -11,6 +11,7 @@ on:
 jobs:
   release-gate:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -50,5 +51,8 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
-      - name: Validate all FULL scaffolds
+      - name: Validate all canonical FULL scaffolds
         run: python scripts/ci_validate_scaffolds.py
+
+      - name: Validate release identity (tag == VERSION)
+        run: python scripts/ci_validate_release_identity.py ${{ inputs.ref }}

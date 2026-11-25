@@ -683,7 +683,7 @@ def get_cmd_output(args):
     try:
         output = subprocess.check_output(list(args), stderr=subprocess.STDOUT)
         return output.decode('utf-8').strip()
-    except:
+    except Exception:
         return None
 
 def get_git_user():

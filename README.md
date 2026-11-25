@@ -1,6 +1,6 @@
 # 🚀 AI Coding Starter
 
-> **V2.2.0** — A portable, runtime-agnostic project bootstrapper for AI-assisted coding with specialist agent teams, multi-runtime adapters, and reproducible resource locking.
+> **V2.2.1** — A portable, runtime-agnostic project bootstrapper for AI-assisted coding with specialist agent teams, multi-runtime adapters, and reproducible resource locking.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
