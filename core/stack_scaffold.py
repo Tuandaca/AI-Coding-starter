@@ -242,7 +242,6 @@ const nextConfig = {
 export default nextConfig;''',
     "src/app/layout.tsx": '''import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import "./globals.css";
 import { Providers } from "./providers";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -3995,7 +3994,7 @@ VUE_LITE_FILES: dict[str, str] = {
     "autoprefixer": "^10.4.16",
     "postcss": "^8.4.31",
     "tailwindcss": "^3.3.5",
-    "typescript": "~5.4.0",
+    "typescript": "~5.4.0"
   }
 }''',
     "tsconfig.json": '''{
