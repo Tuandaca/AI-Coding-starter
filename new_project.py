@@ -678,19 +678,18 @@ PROJECT_TYPES = {
 # AUTO-DISCOVERY
 # ============================================
 
-def get_cmd_output(cmd):
+def get_cmd_output(args):
     """Run command and return output string."""
     try:
-        args = shlex.split(cmd)
-        output = subprocess.check_output(args, stderr=subprocess.STDOUT)
+        output = subprocess.check_output(list(args), stderr=subprocess.STDOUT)
         return output.decode('utf-8').strip()
     except:
         return None
 
 def get_git_user():
     """Get Git user name and email."""
-    name = get_cmd_output("git config user.name")
-    email = get_cmd_output("git config user.email")
+    name = get_cmd_output(["git", "config", "user.name"])
+    email = get_cmd_output(["git", "config", "user.email"])
     return {"name": name or "Unknown User", "email": email or "unknown@example.com"}
 
 def check_tools():
@@ -699,15 +698,15 @@ def check_tools():
 
     # Checkers map: name -> specific command flag
     checkers = {
-        "node": "node -v",
-        "python": "python --version",
-        "git": "git --version",
-        "gh": "gh --version",
-        "npm": "npm -v",
-        "pnpm": "pnpm -v",
-        "yarn": "yarn -v",
-        "bun": "bun -v",
-        "docker": "docker -v"
+        "node": ["node", "-v"],
+        "python": ["python", "--version"],
+        "git": ["git", "--version"],
+        "gh": ["gh", "--version"],
+        "npm": ["npm", "-v"],
+        "pnpm": ["pnpm", "-v"],
+        "yarn": ["yarn", "-v"],
+        "bun": ["bun", "-v"],
+        "docker": ["docker", "-v"]
     }
 
     print("\n  🕵️‍♂️  Auto-Discovery System:")

@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [master, feat/final-resource-hardening, feat/v2.1-agency-integration]
+    branches: [master, feat/final-resource-hardening, feat/v2.1-agency-integration, fix/v2.2.1-final-stabilization]
   pull_request:
     branches: [master, feat/final-resource-hardening]
 
@@ -76,7 +76,7 @@ jobs:
         run: |
           cd /tmp/scaffold-${{ matrix.bundle }}
           if [ -f package.json ]; then
-            npm ci || npm install
+            npm install
             npm run build
           elif [ -f server/*.csproj ]; then
             dotnet restore server/*.csproj

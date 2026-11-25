@@ -74,8 +74,7 @@ REACT_STATIC_FILES: dict[str, str] = {
     "target": "ESNext",
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noEmit": true
+    "isolatedModules": true
   },
   "include": ["vite.config.ts"]
 }''',
@@ -105,9 +104,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <App />
   </React.StrictMode>,
 );''',
-    "src/App.tsx": '''import React from "react";
-
-export default function App() {
+    "src/App.tsx": '''export default function App() {
   return (
     <div className="min-h-screen bg-white text-slate-900">
       <header className="border-b border-slate-200 sticky top-0 bg-white/90 backdrop-blur">
@@ -242,10 +239,9 @@ const nextConfig = {
   transpilePackages: ["@supabase/ssr", "@supabase/supabase-js"],
 };
 
-module.exports = nextConfig;''',
+export default nextConfig;''',
     "src/app/layout.tsx": '''import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import "./globals.css";
 import { Providers } from "./providers";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -1213,6 +1209,7 @@ uvicorn[standard]>=0.24.0
 sqlalchemy[asyncio]>=2.0.0
 alembic>=1.13.0
 pydantic>=2.5.0
+pydantic[email]>=2.5.0
 pydantic-settings>=2.1.0
 psycopg[binary,pool]>=3.1.0
 redis>=5.0.0
@@ -1491,9 +1488,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..database import get_db
-from ..models.user import User
-from ..schemas.user import UserCreate, UserRead, UserUpdate
+from ...database import get_db
+from ...models.user import User
+from ...schemas.user import UserCreate, UserRead, UserUpdate
 
 router = APIRouter()
 
@@ -1552,8 +1549,8 @@ from typing import Annotated
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .database import get_db
-from .models.user import User
+from ..database import get_db
+from ..models.user import User
 
 
 DBSession = Annotated[AsyncSession, Depends(get_db)]
@@ -1871,6 +1868,7 @@ uvicorn[standard]>=0.24.0
 sqlalchemy[asyncio]>=2.0.0
 alembic>=1.13.0
 pydantic>=2.5.0
+pydantic[email]>=2.5.0
 pydantic-settings>=2.1.0
 psycopg[binary,pool]>=3.1.0
 pgvector>=0.3.0
@@ -2129,7 +2127,7 @@ from sqlalchemy import String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, TimestampMixin
-from .config import settings
+from ..config import settings
 
 
 class Document(Base, TimestampMixin):
@@ -2210,16 +2208,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..database import get_db
-from ..models.document import Document
-from ..schemas.document import (
+from ...database import get_db
+from ...models.document import Document
+from ...schemas.document import (
     DocumentCreate,
     DocumentRead,
     DocumentSearch,
     DocumentSearchResult,
 )
-from ..services.embedding import EmbeddingService
-from ..services.vector_search import vector_search
+from .embedding import EmbeddingService
+from .vector_search import vector_search
 
 router = APIRouter()
 
@@ -2286,10 +2284,10 @@ async def search_documents(
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..database import get_db
-from ..schemas.document import ChatRequest, ChatResponse
-from ..services.embedding import EmbeddingService
-from ..services.rag import RagService
+from ...database import get_db
+from ...schemas.document import ChatRequest, ChatResponse
+from ...services.embedding import EmbeddingService
+from ...services.rag import RagService
 
 router = APIRouter()
 
@@ -2377,8 +2375,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import settings
 from ..schemas.document import ChatResponse, DocumentSearchResult
-from ..services.embedding import EmbeddingService
-from ..services.vector_search import vector_search
+from .embedding import EmbeddingService
+from .vector_search import vector_search
 
 try:
     from langchain_core.messages import HumanMessage, SystemMessage
@@ -3853,7 +3851,7 @@ const nextConfig = {
   transpilePackages: [],
 };
 
-module.exports = nextConfig;''',
+export default nextConfig;''',
     "src/app/layout.tsx": '''import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
@@ -3996,9 +3994,7 @@ VUE_LITE_FILES: dict[str, str] = {
     "autoprefixer": "^10.4.16",
     "postcss": "^8.4.31",
     "tailwindcss": "^3.3.5",
-    "typescript": "~5.3.0",
-    "vite": "^5.0.0",
-    "vue-tsc": "^2.0.0"
+    "typescript": "~5.4.0"
   }
 }''',
     "tsconfig.json": '''{
@@ -4198,7 +4194,7 @@ const nextConfig = {
   transpilePackages: [],
 };
 
-module.exports = nextConfig;''',
+export default nextConfig;''',
     "client/src/app/layout.tsx": '''import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { Providers } from "./providers";
@@ -4796,7 +4792,7 @@ SCAFFOLD_SUPPORT: dict[str, str] = {
     "ai-rag-python": "full",
     "dotnet-postgres": "full",
     "nestjs-postgres": "full",
-    "tauri-react-sqlite": "full",
+    "tauri-react-sqlite": "partial",
     "nextjs-vercel": "full",
     "vue-lite": "full",
 }
@@ -4831,14 +4827,18 @@ def scaffold_stack(dest_dir: Path | str, bundle_id: str, project_name: str) -> l
 
     Returns the list of written paths. Empty for bundles without a template.
     """
-    dest = Path(dest_dir)
+    dest = Path(dest_dir).resolve()
     files = scaffold_files(bundle_id, project_name)
     written: list[Path] = []
     for rel_path, content in files.items():
-        parts = Path(rel_path).parts
-        if any(part == ".." or part == "." for part in parts):
+        rel = Path(rel_path)
+        if rel.is_absolute() or any(part in ("", "..", ".") for part in rel.parts):
             raise ValueError(f"Unsafe scaffold path rejected: {rel_path}")
-        target = dest / rel_path
+        target = (dest / rel).resolve()
+        try:
+            target.relative_to(dest)
+        except ValueError:
+            raise ValueError(f"Unsafe scaffold path rejected: {rel_path}")
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
         written.append(target)
