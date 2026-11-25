@@ -104,9 +104,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <App />
   </React.StrictMode>,
 );''',
-    "src/App.tsx": '''import React from "react";
-
-export default function App() {
+    "src/App.tsx": '''export default function App() {
   return (
     <div className="min-h-screen bg-white text-slate-900">
       <header className="border-b border-slate-200 sticky top-0 bg-white/90 backdrop-blur">
@@ -1490,9 +1488,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..database import get_db
-from ..models.user import User
-from ..schemas.user import UserCreate, UserRead, UserUpdate
+from ...database import get_db
+from ...models.user import User
+from ...schemas.user import UserCreate, UserRead, UserUpdate
 
 router = APIRouter()
 
@@ -2209,9 +2207,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..database import get_db
-from ..models.document import Document
-from ..schemas.document import (
+from ...database import get_db
+from ...models.document import Document
+from ...schemas.document import (
     DocumentCreate,
     DocumentRead,
     DocumentSearch,
@@ -2285,8 +2283,8 @@ async def search_documents(
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..database import get_db
-from ..schemas.document import ChatRequest, ChatResponse
+from ...database import get_db
+from ...schemas.document import ChatRequest, ChatResponse
 from ..services.embedding import EmbeddingService
 from ..services.rag import RagService
 
