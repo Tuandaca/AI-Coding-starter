@@ -190,7 +190,7 @@
       "supports_commands": true,
       "detection": {
         "executables": ["opencode"],
-        "config_files": [".opencode/config.json", ".opencode/agent/*.md"],
+        "config_files": [".opencode/opencode.json", ".opencode/opencode.jsonc", ".opencode/agent/*.md"],
         "environment_variables": ["OPENCODE_CONFIG_DIR"]
       },
       "limitations": ["Hook system is runtime-specific"],

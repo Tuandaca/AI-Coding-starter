@@ -1,0 +1,54 @@
+name: Release Validation
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: "Git ref to validate (branch, tag, or SHA)"
+        required: true
+        type: string
+
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: pip install -e .
+
+      - name: Run compileall
+        run: python -m compileall -q core tests scripts new_project.py analytics.py migrate_project.py
+
+      - name: Run full unittest suite
+        run: python -m unittest discover -s tests -t .
+
+      - name: Run consistency and security checks
+        run: python scripts/ci_consistency_check.py
+
+      - name: Run runtime isolation tests
+        run: python -m unittest tests.test_runtime_isolation -v
+
+      - name: Run runtime switching tests
+        run: python -m unittest tests.test_runtime_switching -v
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Validate all FULL scaffolds
+        run: python scripts/ci_validate_scaffolds.py

@@ -19,20 +19,21 @@ import new_project
 
 
 # Test matrix: project_type -> (type_index, expected_bundle)
+# Uses canonical project type IDs from catalog/project-types.yaml
 TEST_MATRIX = [
-    ("saas", "5", "nextjs-dotnet-postgres"),
-    ("portfolio", "1", "react-static"),
-    ("blog", "2", "nextjs-dotnet-postgres"),
-    ("docs", "3", "vue-lite"),
-    ("landing-page", "4", "react-static"),
-    ("mobile-app", "6", "expo-supabase-mobile"),
-    ("desktop-app", "7", "tauri-react-sqlite"),
-    ("ai-rag", "8", "ai-rag-python"),
-    ("fintech", "9", "nestjs-postgres"),
-    ("fullstack-api", "10", "fastapi-postgres"),
+    ("saas", "16", "nextjs-dotnet-postgres"),
+    ("portfolio", "14", "react-static"),
+    ("blog-content", "4", "nextjs-dotnet-postgres"),
+    ("landing-page", "10", "react-static"),
+    ("mobile-application", "11", "expo-supabase-mobile"),
+    ("desktop-application", "7", "tauri-react-sqlite"),
+    ("ai-rag", "2", "ai-rag-python"),
+    ("backend-api", "3", "fastapi-postgres"),
+    ("fullstack-application", "9", "nestjs-postgres"),
+    ("dashboard", "6", "react-static"),
 ]
 
-RUNTIMES = ["portable", "codex", "opencode", "claude", "cursor"]
+RUNTIMES = ["portable", "codex", "opencode", "claude-code", "cursor"]
 
 
 def run_wizard(project_name: str, project_path: Path, type_index: str, bundle_index: str = "", runtime: str = "1") -> tuple[bool, str]:
@@ -90,18 +91,16 @@ def check_project_structure(project_root: Path, runtime: str) -> dict[str, bool]
     
     # Runtime adapters (if not portable)
     if runtime != "portable":
-        if runtime == "1":  # portable
-            pass
-        elif runtime == "2":  # codex
-            checks[".codex/config.toml"] = (project_root / ".codex" / "config.toml").exists()
-        elif runtime == "3":  # opencode
-            checks[".opencode/config.json"] = (project_root / ".opencode" / "config.json").exists()
-        elif runtime == "4":  # antigravity
-            checks[".agent/GEMINI.md"] = (project_root / ".agent" / "GEMINI.md").exists()
-        elif runtime == "5":  # claude
-            checks[".claude/settings.json"] = (project_root / ".claude" / "settings.json").exists()
-        elif runtime == "6":  # cursor
-            checks[".cursor/mcp.json"] = (project_root / ".cursor" / "mcp.json").exists()
+        if runtime == "codex":
+            checks[".codex"] = (project_root / ".codex").exists()
+        elif runtime == "opencode":
+            checks[".opencode"] = (project_root / ".opencode").exists()
+        elif runtime == "antigravity":
+            checks[".agent"] = (project_root / ".agent").exists()
+        elif runtime == "claude-code":
+            checks[".claude"] = (project_root / ".claude").exists()
+        elif runtime == "cursor":
+            checks[".cursor"] = (project_root / ".cursor").exists()
     
     return checks
 
@@ -129,6 +128,22 @@ def run_integration_test(project_type: str, type_index: str, expected_bundle: st
         if project_root.exists():
             result["checks"] = check_project_structure(project_root, runtime)
             result["checks"]["all_passed"] = all(result["checks"].values())
+            
+            # TEST-02: Verify expected_bundle against generated canonical state
+            import yaml
+            spec_path = project_root / ".ai-coding-starter" / "project.yaml"
+            if spec_path.exists():
+                try:
+                    spec = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
+                    actual_bundle = spec.get("project", {}).get("stack_bundle", "")
+                    bundle_match = (actual_bundle == expected_bundle)
+                    result["checks"]["expected_bundle"] = bundle_match
+                    result["checks"]["all_passed"] = all(result["checks"].values())
+                    if not bundle_match:
+                        result["error"] = f"Bundle mismatch: expected {expected_bundle}, got {actual_bundle}"
+                except Exception as e:
+                    result["checks"]["expected_bundle"] = False
+                    result["error"] = f"Failed to read project.yaml: {e}"
         else:
             result["success"] = False
             result["error"] = "Project directory not created"
@@ -158,12 +173,21 @@ def run_matrix():
             failed = [k for k, v in result["checks"].items() if not v]
             print(f"    Failed checks: {failed}")
     
+    RUNTIME_INDEX = {
+        "portable": "1",
+        "codex": "2",
+        "opencode": "3",
+        "antigravity": "4",
+        "claude-code": "5",
+        "cursor": "6",
+    }
+
     # Test one project type with all runtimes
     print("\nTesting saas with all runtimes...")
-    for i, runtime in enumerate(RUNTIMES):
-        runtime_index = str(i + 1)
+    for runtime in RUNTIMES:
+        runtime_index = RUNTIME_INDEX[runtime]
         print(f"  Testing saas ({runtime})...")
-        result = run_integration_test("saas", "5", "nextjs-dotnet-postgres", runtime, runtime_index)
+        result = run_integration_test("saas", "16", "nextjs-dotnet-postgres", runtime, runtime_index)
         results.append(result)
         status = "PASS" if result["success"] and result["checks"].get("all_passed", False) else "FAIL"
         print(f"    {status} ({result['duration_sec']:.1f}s)")

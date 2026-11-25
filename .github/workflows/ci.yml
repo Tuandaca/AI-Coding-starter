@@ -27,11 +27,62 @@ jobs:
       - name: Display Python version
         run: python --version
 
+      - name: Install dependencies
+        run: pip install -e .
+
       - name: Run compileall (stdlib byte-compile, offline)
         run: python -m compileall -q core tests scripts new_project.py analytics.py migrate_project.py
 
-      - name: Run full unittest suite (offline, stdlib only)
+      - name: Run full unittest suite
         run: python -m unittest discover -s tests -t .
 
       - name: Repository consistency and security checks
         run: python scripts/ci_consistency_check.py
+
+  fast-scaffolds:
+    runs-on: ubuntu-latest
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        bundle: [react-static, fastapi-postgres, dotnet-postgres]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: pip install -e .
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Generate scaffold ${{ matrix.bundle }}
+        run: BUNDLE="${{ matrix.bundle }}" python scripts/ci_generate_scaffold.py
+
+      - name: Build ${{ matrix.bundle }}
+        run: |
+          cd /tmp/scaffold-${{ matrix.bundle }}
+          if [ -f package.json ]; then
+            npm ci || npm install
+            npm run build
+          elif [ -f server/*.csproj ]; then
+            dotnet restore server/*.csproj
+            dotnet build server/*.csproj --no-restore
+          elif [ -f requirements.txt ]; then
+            pip install -r requirements.txt 2>/dev/null || true
+            python -m compileall .
+            python -c "from src.main import app"
+          fi

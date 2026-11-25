@@ -15,6 +15,7 @@ Or via Antigravity chat:
 
 import os
 import sys
+import shlex
 import shutil
 import importlib
 from pathlib import Path
@@ -680,11 +681,8 @@ PROJECT_TYPES = {
 def get_cmd_output(cmd):
     """Run command and return output string."""
     try:
-        if sys.platform == "win32":
-            # Windows specific handling
-            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT)
-        else:
-            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT)
+        args = shlex.split(cmd)
+        output = subprocess.check_output(args, stderr=subprocess.STDOUT)
         return output.decode('utf-8').strip()
     except:
         return None
@@ -2172,20 +2170,9 @@ def main():
         print(cli_ui.info(f"Orca: {orca_result['message']}"))
     print()
 
-    # Apply new runtime adapters (Codex, OpenCode, Claude, Cursor)
-    # These generate config from .ai-workspace/ + project.yaml
-    try:
-        from core.runtime_adapters import apply_all_adapters, list_adapters
-        adapter_results = apply_all_adapters(full_project_path, force=False)
-        for adapter_name, written_paths in adapter_results.items():
-            if written_paths:
-                print(cli_ui.success(f"Runtime adapter '{adapter_name}': {len(written_paths)} files generated"))
-            else:
-                print(cli_ui.info(f"Runtime adapter '{adapter_name}': skipped (no config dir created)"))
-    except ImportError:
-        pass  # runtime_adapters not available
-    except Exception as e:
-        print(cli_ui.warning(f"Runtime adapters: {e}"))
+    # Note: Runtime adapter rendering is handled above via GenericRenderer
+    # for the selected runtime only. apply_all_adapters() is NOT called here
+    # to preserve portable-mode neutrality and selected-runtime isolation.
     print()
 
     if runtime_id != "portable" and not runtime_ok:

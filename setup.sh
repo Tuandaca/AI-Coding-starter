@@ -28,6 +28,19 @@ else
     exit 1
 fi
 
+# Install Python dependencies
+echo ""
+echo "============================================"
+echo "   INSTALLING DEPENDENCIES"
+echo "============================================"
+echo ""
+"$PYTHON_CMD" -m pip install -e "$SCRIPT_DIR"
+if [ $? -ne 0 ]; then
+    echo "[ERROR] Dependency installation failed."
+    exit 1
+fi
+echo "[OK] Dependencies installed."
+
 # Run shared setup helper (prompts for projects dir, writes config.json)
 echo ""
 echo "============================================"

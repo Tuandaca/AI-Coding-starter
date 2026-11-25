@@ -66,6 +66,19 @@ REACT_STATIC_FILES: dict[str, str] = {
   "include": ["src"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }''',
+    "tsconfig.node.json": '''{
+  "compilerOptions": {
+    "composite": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "target": "ESNext",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true
+  },
+  "include": ["vite.config.ts"]
+}''',
     "vite.config.ts": '''import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
@@ -134,7 +147,7 @@ body {
   @apply antialiased;
 }
 ''',
-    "public/index.html": '''<!doctype html>
+    "index.html": '''<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -2738,7 +2751,7 @@ EXPO_SUPABASE_MOBILE_FILES: dict[str, str] = {
   "devDependencies": {
     "@babel/core": "^7.20.0",
     "@types/react": "~18.2.0",
-    "@types/react-native": "^0.74.0",
+    "@types/react-native": "^0.72.0",
     "typescript": "~5.3.0",
     "nativewind": "^4.0.32",
     "tailwindcss": "^3.4.0"
@@ -2900,7 +2913,7 @@ const styles = StyleSheet.create({
   },
 });''',
     "src/screens/LoginScreen.tsx": '''import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { supabase } from "../lib/supabase";
 
 export function LoginScreen() {
@@ -2913,7 +2926,7 @@ export function LoginScreen() {
       password,
     });
     if (error) {
-      alert(error.message);
+      Alert.alert(error.message);
     }
   };
 
@@ -3517,6 +3530,18 @@ tauri-build = { version = "1.6" }''',
     "vite": "^5.0.0"
   }
 }''',
+    "index.html": '''<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{project_name}}</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>''',
     "src/main.rs": '''#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use serde::{Deserialize, Serialize};
@@ -3627,8 +3652,8 @@ fn main() {
     "shell::sidecar"
   ]
 }''',
-    "src/App.tsx": '''import React, { useState, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
+    "src/App.tsx": '''import { useState, useEffect } from "react";
+import { invoke } from "@tauri-apps/api";
 
 export default function App() {
   const [initialized, setInitialized] = useState(false);
@@ -3685,10 +3710,9 @@ export default {
     "vite.config.ts": '''import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
-import tauri from "@tauri-apps/plugin-vite";
 
 export default defineConfig({
-  plugins: [react(), tauri()],
+  plugins: [react()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -3706,10 +3730,8 @@ export default defineConfig({
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "noEmit": true,
     "jsx": "react-jsx",
     "strict": true,
     "noUnusedLocals": true,
@@ -3721,13 +3743,13 @@ export default defineConfig({
 }''',
     "tsconfig.node.json": '''{
   "compilerOptions": {
+    "composite": true,
     "module": "ESNext",
     "moduleResolution": "bundler",
     "target": "ESNext",
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noEmit": true
+    "isolatedModules": true
   },
   "include": ["vite.config.ts"]
 }''',
@@ -4813,6 +4835,9 @@ def scaffold_stack(dest_dir: Path | str, bundle_id: str, project_name: str) -> l
     files = scaffold_files(bundle_id, project_name)
     written: list[Path] = []
     for rel_path, content in files.items():
+        parts = Path(rel_path).parts
+        if any(part == ".." or part == "." for part in parts):
+            raise ValueError(f"Unsafe scaffold path rejected: {rel_path}")
         target = dest / rel_path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")

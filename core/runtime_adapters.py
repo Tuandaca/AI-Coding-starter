@@ -335,7 +335,7 @@ class ClaudeCodeAdapter(RuntimeAdapter):
 
     @property
     def runtime_name(self) -> str:
-        return "claude"
+        return "claude-code"
 
     @property
     def config_dir_name(self) -> str:
@@ -454,13 +454,40 @@ alwaysApply: false
 """
 
 
-# Adapter registry
-ADAPTERS = {
-    "codex": CodexAdapter,
-    "opencode": OpenCodeAdapter,
-    "claude": ClaudeCodeAdapter,
-    "cursor": CursorAdapter,
-}
+# Adapter registry — derived from runtime-adapters/*.yaml manifests.
+# The YAML manifests are the single source of truth; this dict is built
+# dynamically to avoid duplicate runtime definitions.
+import json as _json
+import os as _os
+
+ADAPTERS = {}
+_adapters_dir = _os.path.join(
+    _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
+    "runtime-adapters",
+)
+if _os.path.isdir(_adapters_dir):
+    for _fname in sorted(_os.listdir(_adapters_dir)):
+        if _fname.endswith(".yaml") or _fname.endswith(".json"):
+            _fpath = _os.path.join(_adapters_dir, _fname)
+            try:
+                with open(_fpath, encoding="utf-8") as _f:
+                    _data = _json.load(_f)
+                if isinstance(_data, dict) and "runtime_id" in _data:
+                    _rid = _data["runtime_id"]
+                    # Map to adapter class if available, else None
+                    _cls = None
+                    if _rid == "codex":
+                        _cls = CodexAdapter
+                    elif _rid == "opencode":
+                        _cls = OpenCodeAdapter
+                    elif _rid == "claude-code":
+                        _cls = ClaudeCodeAdapter
+                    elif _rid == "cursor":
+                        _cls = CursorAdapter
+                    if _cls is not None:
+                        ADAPTERS[_rid] = _cls
+            except (OSError, ValueError):
+                pass
 
 
 def get_adapter(runtime: str, project_root: Path | str) -> RuntimeAdapter:

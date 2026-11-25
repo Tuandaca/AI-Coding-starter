@@ -1,4 +1,4 @@
-# AI-Coding-starter — Current Status (V2.1.1)
+# AI-Coding-starter — Current Status (V2.2.0)
 
 > Concise, factual status matrix. This is NOT a design rationale or roadmap
 > rewrite; it records what is implemented, what is honest about its limits,
@@ -7,7 +7,7 @@
 
 ## Version
 
-`VERSION` = `2.1.1` (unchanged during final-resource hardening).
+`VERSION` = `2.2.0`.
 
 ## Canonical architecture (invariants preserved)
 

@@ -1,0 +1,67 @@
+name: Full Scaffold Validation
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 2 * * *"
+
+jobs:
+  build-all-scaffolds:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        bundle:
+          [react-static, nextjs-supabase, nextjs-dotnet-postgres,
+           fastapi-postgres, ai-rag-python, dotnet-postgres,
+           nestjs-postgres, nextjs-vercel, vue-lite, expo-supabase-mobile]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: pip install -e .
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Generate scaffold ${{ matrix.bundle }}
+        run: BUNDLE="${{ matrix.bundle }}" python scripts/ci_generate_scaffold.py
+
+      - name: Build ${{ matrix.bundle }}
+        run: |
+          cd /tmp/scaffold-${{ matrix.bundle }}
+          if [ -f package.json ]; then
+            npm ci || npm install
+            npm run build
+          elif [ -f server/*.csproj ]; then
+            dotnet restore server/*.csproj
+            dotnet build server/*.csproj --no-restore
+          elif [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+            python -m compileall .
+            python -c "from src.main import app"
+          elif [ -f pyproject.toml ]; then
+            pip install -e .
+            python -m compileall .
+          fi
+
+  validate-matrix:
+    runs-on: ubuntu-latest
+    needs: build-all-scaffolds
+    steps:
+      - name: Report scaffold matrix results
+        run: echo "All FULL scaffold bundles validated in build-all-scaffolds matrix"

@@ -122,7 +122,7 @@ class TestGoldenPortfolioE2E(unittest.TestCase):
         self.assertTrue((self.td / "tsconfig.json").is_file())
         self.assertTrue((self.td / "vite.config.ts").is_file())
         self.assertTrue((self.td / "src").is_dir())
-        self.assertTrue((self.td / "public").is_dir())
+        self.assertTrue((self.td / "index.html").is_file())
 
     def test_gitignore_and_readme(self):
         self.assertTrue((self.td / ".gitignore").is_file())

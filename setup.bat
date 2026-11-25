@@ -41,6 +41,21 @@ if exist "%~dp0resources\agents" (
     exit /b 1
 )
 
+:: Install Python dependencies
+echo.
+echo ============================================
+echo    INSTALLING DEPENDENCIES
+echo ============================================
+echo.
+
+"%PYTHON_CMD%" -m pip install -e "%~dp0"
+if errorlevel 1 (
+    echo [ERROR] Dependency installation failed.
+    pause
+    exit /b 1
+)
+echo [OK] Dependencies installed.
+
 :: Run shared setup helper (prompts for projects dir, writes config.json)
 echo.
 echo ============================================
