@@ -45,7 +45,7 @@ jobs:
         run: |
           cd /tmp/scaffold-${{ matrix.bundle }}
           if [ -f package.json ]; then
-            npm ci || npm install
+            npm install
             npm run build
           elif [ -f server/*.csproj ]; then
             dotnet restore server/*.csproj

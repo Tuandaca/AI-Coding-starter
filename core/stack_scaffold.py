@@ -74,8 +74,7 @@ REACT_STATIC_FILES: dict[str, str] = {
     "target": "ESNext",
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noEmit": true
+    "isolatedModules": true
   },
   "include": ["vite.config.ts"]
 }''',
@@ -1552,8 +1551,8 @@ from typing import Annotated
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .database import get_db
-from .models.user import User
+from ..database import get_db
+from ..models.user import User
 
 
 DBSession = Annotated[AsyncSession, Depends(get_db)]
@@ -2129,7 +2128,7 @@ from sqlalchemy import String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, TimestampMixin
-from .config import settings
+from ..config import settings
 
 
 class Document(Base, TimestampMixin):
@@ -4796,7 +4795,7 @@ SCAFFOLD_SUPPORT: dict[str, str] = {
     "ai-rag-python": "full",
     "dotnet-postgres": "full",
     "nestjs-postgres": "full",
-    "tauri-react-sqlite": "full",
+    "tauri-react-sqlite": "partial",
     "nextjs-vercel": "full",
     "vue-lite": "full",
 }
@@ -4831,14 +4830,18 @@ def scaffold_stack(dest_dir: Path | str, bundle_id: str, project_name: str) -> l
 
     Returns the list of written paths. Empty for bundles without a template.
     """
-    dest = Path(dest_dir)
+    dest = Path(dest_dir).resolve()
     files = scaffold_files(bundle_id, project_name)
     written: list[Path] = []
     for rel_path, content in files.items():
-        parts = Path(rel_path).parts
-        if any(part == ".." or part == "." for part in parts):
+        rel = Path(rel_path)
+        if rel.is_absolute() or any(part in ("", "..", ".") for part in rel.parts):
             raise ValueError(f"Unsafe scaffold path rejected: {rel_path}")
-        target = dest / rel_path
+        target = (dest / rel).resolve()
+        try:
+            target.relative_to(dest)
+        except ValueError:
+            raise ValueError(f"Unsafe scaffold path rejected: {rel_path}")
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
         written.append(target)
