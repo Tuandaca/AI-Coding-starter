@@ -239,7 +239,7 @@ const nextConfig = {
   transpilePackages: ["@supabase/ssr", "@supabase/supabase-js"],
 };
 
-module.exports = nextConfig;''',
+export default nextConfig;''',
     "src/app/layout.tsx": '''import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
@@ -2217,8 +2217,8 @@ from ...schemas.document import (
     DocumentSearch,
     DocumentSearchResult,
 )
-from ..services.embedding import EmbeddingService
-from ..services.vector_search import vector_search
+from ...services.embedding import EmbeddingService
+from ...services.vector_search import vector_search
 
 router = APIRouter()
 
@@ -2287,8 +2287,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...database import get_db
 from ...schemas.document import ChatRequest, ChatResponse
-from ..services.embedding import EmbeddingService
-from ..services.rag import RagService
+from ...services.embedding import EmbeddingService
+from ...services.rag import RagService
 
 router = APIRouter()
 
@@ -2376,8 +2376,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import settings
 from ..schemas.document import ChatResponse, DocumentSearchResult
-from ..services.embedding import EmbeddingService
-from ..services.vector_search import vector_search
+from ...services.embedding import EmbeddingService
+from ...services.vector_search import vector_search
 
 try:
     from langchain_core.messages import HumanMessage, SystemMessage
@@ -3852,7 +3852,7 @@ const nextConfig = {
   transpilePackages: [],
 };
 
-module.exports = nextConfig;''',
+export default nextConfig;''',
     "src/app/layout.tsx": '''import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
@@ -3995,9 +3995,7 @@ VUE_LITE_FILES: dict[str, str] = {
     "autoprefixer": "^10.4.16",
     "postcss": "^8.4.31",
     "tailwindcss": "^3.3.5",
-    "typescript": "~5.3.0",
-    "vite": "^5.0.0",
-    "vue-tsc": "^2.0.0"
+    "typescript": "~5.4.0",
   }
 }''',
     "tsconfig.json": '''{
@@ -4197,7 +4195,7 @@ const nextConfig = {
   transpilePackages: [],
 };
 
-module.exports = nextConfig;''',
+export default nextConfig;''',
     "client/src/app/layout.tsx": '''import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { Providers } from "./providers";

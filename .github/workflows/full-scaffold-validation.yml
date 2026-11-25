@@ -44,7 +44,10 @@ jobs:
       - name: Build ${{ matrix.bundle }}
         run: |
           cd /tmp/scaffold-${{ matrix.bundle }}
-          if [ -f package.json ]; then
+          if [ "${{ matrix.bundle }}" = "expo-supabase-mobile" ]; then
+            npm install
+            npm run typecheck
+          elif [ -f package.json ]; then
             npm install
             npm run build
           elif [ -f server/*.csproj ]; then
